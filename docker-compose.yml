@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dashly_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: dashly_db
+      POSTGRES_USER: dashly_user
+      POSTGRES_PASSWORD: dashly_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - dashly-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d dashly_db -U dashly_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: dashly_redis
+    restart: always
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dashly-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  emqx:
+    image: emqx/emqx:5.8
+    container_name: dashly_emqx
+    restart: always
+    environment:
+      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: public
+    ports:
+      - "1883:1883"     # MQTT/TCP
+      - "8083:8083"     # MQTT/WS
+      - "8084:8084"     # MQTT/WSS
+      - "18083:18083"   # EMQX Dashboard
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    networks:
+      - dashly-network
+
+networks:
+  dashly-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  emqx_data:
+  emqx_log:
