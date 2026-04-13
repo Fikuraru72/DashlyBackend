@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
+import { UpdateEventDto } from './dto/update-event.dto';
 import { UpdateEventStatusDto } from './dto/update-event-status.dto';
 import { JoinEventDto } from './dto/join-event.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -25,10 +26,26 @@ export class EventsController {
         return this.eventsService.getAllEvents(user);
     }
 
+    @Get('my-events')
+    @Roles('PARTICIPANT')
+    async getMyEvents(@CurrentUser() user: any) {
+        return this.eventsService.getMyEvents(user);
+    }
+
     @Get(':id')
-    @Roles('SUPER_ADMIN', 'STAFF')
+    @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
     async getEventById(@Param('id') id: string, @CurrentUser() user: any) {
         return this.eventsService.getEventById(+id, user);
+    }
+
+    @Put(':id')
+    @Roles('SUPER_ADMIN', 'STAFF')
+    async updateEvent(
+        @Param('id') id: string,
+        @CurrentUser() user: any,
+        @Body() dto: UpdateEventDto,
+    ) {
+        return this.eventsService.updateEvent(+id, user, dto);
     }
 
     @Put(':id/status')
@@ -51,5 +68,17 @@ export class EventsController {
     @Roles('PARTICIPANT')
     async joinEvent(@CurrentUser() user: any, @Body() dto: JoinEventDto) {
         return this.eventsService.joinEvent(user, dto);
+    }
+
+    @Get(':id/participants')
+    @Roles('SUPER_ADMIN', 'STAFF')
+    async getParticipants(@Param('id') id: string) {
+        return this.eventsService.getParticipants(+id);
+    }
+
+    @Get(':id/positions')
+    @Roles('SUPER_ADMIN', 'STAFF')
+    async getEventPositions(@Param('id') id: string) {
+        return this.eventsService.getEventPositions(+id);
     }
 }

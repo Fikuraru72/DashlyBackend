@@ -93,13 +93,17 @@ async function seed() {
             ]
         };
 
+        const now = new Date();
         const [insertedEvent] = await db.insert(schema.events).values({
             name: eventName,
             description: 'A simulation run for testing the Dashly MVP backend tracking pipeline.',
-            status: 'ACTIVE',
+            category: 'RUNNING',
+            status: 'IDLE',
             token: 'beta_run_xyz_123',
             maxParticipants: 100,
-            routeGeojson: mockRoute
+            routeGeojson: mockRoute,
+            startTime: new Date(now.getTime() + 3600000), // 1 hour from now
+            endTime: new Date(now.getTime() + 7200000),   // 2 hours from now
         }).returning();
         event = insertedEvent;
     } else {

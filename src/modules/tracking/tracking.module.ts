@@ -4,9 +4,10 @@ import { BatchService } from './services/batch/batch.service';
 import { EventsGateway } from './events/events.gateway';
 import { RedisModule } from '../redis/redis.module';
 import { AnalysisModule } from '../analysis/analysis.module';
+import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [RedisModule, AnalysisModule],
+  imports: [RedisModule, AnalysisModule, EventsModule],
   providers: [MqttService, BatchService, EventsGateway]
 })
 export class TrackingModule { }

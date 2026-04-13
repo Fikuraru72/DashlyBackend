@@ -2,6 +2,6 @@ import { IsIn, IsString } from 'class-validator';
 
 export class UpdateEventStatusDto {
     @IsString()
-    @IsIn(['IDLE', 'LIVE', 'FINISHED'])
+    @IsIn(['IDLE', 'START', 'FINISHED'])
     status!: string;
 }

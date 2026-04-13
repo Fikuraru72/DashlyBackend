@@ -72,4 +72,33 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         }
         return null;
     }
+
+    /**
+     * Get all participant positions for an event.
+     * We use a large radius scan (over 10,000km) centered at [0,0] to get all members.
+     */
+    async getAllParticipantPositions(eventId: number) {
+        const geoKey = `current_positions:${eventId}`;
+        
+        // 1. Get all members of the geo set
+        // Note: MapLibre logic stores members by 'userId' string
+        const members = await this.redisClient.zrange(geoKey, 0, -1);
+        if (members.length === 0) return [];
+
+        const results: any[] = [];
+        for (const userId of members) {
+            const pos = await this.redisClient.geopos(geoKey, userId);
+            const stats = await this.getParticipantStats(parseInt(userId, 10));
+            
+            if (pos && pos[0]) {
+                results.push({
+                    userId: parseInt(userId, 10),
+                    lat: parseFloat(pos[0][1]),
+                    lng: parseFloat(pos[0][0]),
+                    ...stats,
+                });
+            }
+        }
+        return results;
+    }
 }

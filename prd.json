@@ -1,0 +1,206 @@
+{
+  "project": "DashlyBackend",
+  "version": "0.0.1",
+  "reviewDate": "2026-03-13",
+  "summary": "Real-time event-tracking backend built with NestJS, Drizzle ORM (PostgreSQL), Redis, MQTT (EMQX), and Socket.IO. Solid architectural foundation with critical security and correctness issues to resolve before production.",
+  "issues": [
+    {
+      "id": 1,
+      "severity": "CRITICAL",
+      "file": "src/db/schema.ts",
+      "title": "serial() misused as Foreign Key",
+      "description": "All FK columns (roleId, userId, eventId) use serial() instead of integer(). serial() adds a NOT NULL auto-increment default sequence that conflicts with actual FK values.",
+      "fix": "Replace all FK serial() columns with integer(). Affected: users.roleId, locationLogs.userId, eventStaff.eventId, eventStaff.userId, eventParticipants.eventId, eventParticipants.userId, anomalies.eventId, anomalies.userId."
+    },
+    {
+      "id": 2,
+      "severity": "CRITICAL",
+      "file": "src/modules/auth/auth.module.ts, src/modules/auth/strategies/jwt.strategy.ts",
+      "title": "Hardcoded JWT secret fallback",
+      "description": "If JWT_SECRET env var is not set, the app falls back to 'default_secret', making all tokens trivially forgeable.",
+      "fix": "Use configService.getOrThrow<string>('JWT_SECRET') in both auth.module.ts and jwt.strategy.ts."
+    },
+    {
+      "id": 3,
+      "severity": "CRITICAL",
+      "file": "src/modules/auth/auth.service.ts",
+      "title": "Google Login is a security bypass stub",
+      "description": "googleLogin() only rejects the literal string 'invalid_token'. Any other token string grants auth as a hardcoded user with a dummy JWT.",
+      "fix": "Implement proper Google OAuth via google-auth-library, or remove the endpoint until it is ready."
+    },
+    {
+      "id": 4,
+      "severity": "CRITICAL",
+      "file": "src/main.ts",
+      "title": "Missing global ValidationPipe",
+      "description": "class-validator decorators on DTOs (@IsEmail, @MinLength, etc.) are completely inert without a ValidationPipe. All DTO validation is currently non-functional.",
+      "fix": "Add app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) in bootstrap()."
+    },
+    {
+      "id": 5,
+      "severity": "CRITICAL",
+      "file": "src/modules/tracking/events/events.gateway.ts",
+      "title": "No WebSocket authentication",
+      "description": "Any client can join any event room and receive live location data. There is no JWT validation on WS connection or on joinEventRoom.",
+      "fix": "Implement a WsGuard that validates JWT from socket handshake auth header and enforces event access authorization."
+    },
+    {
+      "id": 6,
+      "severity": "HIGH",
+      "file": "src/modules/events/events.service.ts, src/modules/auth/auth.service.ts, src/modules/tracking/events/events.gateway.ts",
+      "title": "Pervasive any types",
+      "description": "user: any, role: any, payload: any are used throughout the codebase, entirely bypassing TypeScript's type safety.",
+      "fix": "Define an AuthenticatedUser interface (id, email, role, permissions) and use it consistently across services and controllers."
+    },
+    {
+      "id": 7,
+      "severity": "HIGH",
+      "file": "src/modules/events/events.service.ts",
+      "title": "Race condition in joinEvent count",
+      "description": "currentCount is read and incremented as event.currentCount + 1 in application code. Concurrent joins can over-fill the event.",
+      "fix": "Use SQL-level atomic increment with a WHERE clause enforcing capacity: SET current_count = current_count + 1 WHERE current_count < max_participants."
+    },
+    {
+      "id": 8,
+      "severity": "HIGH",
+      "file": "src/modules/tracking/services/batch/batch.service.ts",
+      "title": "Broken import path (../../../../../src/)",
+      "description": "Imports traverse up to root and re-enter src/, creating a path that resolves to src/src/. Other files use ../../db/ correctly.",
+      "fix": "Change '../../../../../src/db/database.module' to '../../../../db/database.module'."
+    },
+    {
+      "id": 9,
+      "severity": "HIGH",
+      "file": "src/modules/auth/auth.service.ts",
+      "title": "Redundant DB query in login() — N+1",
+      "description": "login() queries users with 'with: { role: true }' but then performs a separate roles.findFirst() query anyway. The comment incorrectly claims the relation is unavailable.",
+      "fix": "Remove the separate role query; use user.role from the joined result."
+    },
+    {
+      "id": 10,
+      "severity": "HIGH",
+      "file": "src/modules/events/events.service.ts",
+      "title": "Weak token entropy (Math.random())",
+      "description": "Math.random() is not cryptographically secure and produces only ~40 bits of entropy for the 8-character join token.",
+      "fix": "Use crypto.randomBytes(6).toString('hex').toUpperCase() for a cryptographically secure token."
+    },
+    {
+      "id": 11,
+      "severity": "MEDIUM",
+      "file": "src/modules/analysis/analysis.service.ts",
+      "title": "STUCK anomaly check compares position to itself",
+      "description": "getPreviousPosition() is called after updateParticipantPosition() in MqttService. Redis already holds the new position, so distance is always 0 and the check is broken.",
+      "fix": "Fetch previous position from Redis before calling updateParticipantPosition(), then pass it into detectAnomalies()."
+    },
+    {
+      "id": 12,
+      "severity": "MEDIUM",
+      "file": "src/modules/analysis/analysis.service.ts",
+      "title": "Anomaly flooding — no deduplication",
+      "description": "Every MQTT message can trigger an insertAnomaly() write. A single prolonged anomaly generates dozens of identical DB rows.",
+      "fix": "Use a Redis key with TTL per (userId, eventId, anomalyType) as a cooldown gate before inserting."
+    },
+    {
+      "id": 13,
+      "severity": "MEDIUM",
+      "file": "src/main.ts",
+      "title": "No CORS config or HTTP security headers",
+      "description": "The HTTP server exposes no CORS policy and no security headers (Helmet). WebSocket CORS is open (*) which is acceptable only in development.",
+      "fix": "Add app.use(helmet()) and app.enableCors({ origin: process.env.ALLOWED_ORIGINS }) in bootstrap()."
+    },
+    {
+      "id": 14,
+      "severity": "MEDIUM",
+      "file": "src/modules/events/events.service.ts",
+      "title": "Orphaned locationLogs and anomalies on event delete",
+      "description": "deleteEvent() cleans up eventStaff and eventParticipants but leaves locationLogs and anomalies orphaned.",
+      "fix": "Add deletion of related records or use ON DELETE CASCADE on FK definitions."
+    },
+    {
+      "id": 15,
+      "severity": "MEDIUM",
+      "file": "src/modules/events/events.controller.ts",
+      "title": "STAFF can delete events",
+      "description": "The DELETE /:id endpoint grants access to both SUPER_ADMIN and STAFF. Staff deleting events is almost certainly unintended.",
+      "fix": "Restrict @Roles to 'SUPER_ADMIN' only for the delete endpoint."
+    },
+    {
+      "id": 16,
+      "severity": "MEDIUM",
+      "file": "src/modules/redis/redis.service.ts",
+      "title": "Redis connection errors unhandled",
+      "description": "No error listener is registered on the ioredis client. A Redis failure causes silent crashes in the tracking pipeline.",
+      "fix": "Add this.redisClient.on('error', (err) => this.logger.error('Redis error', err))."
+    },
+    {
+      "id": 17,
+      "severity": "MEDIUM",
+      "file": "src/modules/redis/redis.service.ts",
+      "title": "Default battery value '100' is misleading",
+      "description": "When battery data is absent, '100' is stored, implying the device is fully charged.",
+      "fix": "Store 'unknown' or omit the field when battery data is not present."
+    },
+    {
+      "id": 18,
+      "severity": "LOW",
+      "file": "src/db/schema.ts",
+      "title": "lat/lng stored as varchar instead of doublePrecision",
+      "description": "Geographic coordinates stored as strings misses proper indexing, range comparisons, and wastes storage.",
+      "fix": "Use doublePrecision() from drizzle-orm/pg-core for latitude and longitude columns."
+    },
+    {
+      "id": 19,
+      "severity": "LOW",
+      "file": "src/db/schema.ts",
+      "title": "Event status as varchar instead of pgEnum",
+      "description": "The status column allows any string up to 50 chars. Database-level validation is absent.",
+      "fix": "Define export const eventStatusEnum = pgEnum('event_status', ['IDLE', 'LIVE', 'FINISHED']) and use it."
+    },
+    {
+      "id": 20,
+      "severity": "LOW",
+      "file": "src/modules/events/dto/create-event.dto.ts",
+      "title": "Missing @IsOptional() on description field",
+      "description": "description has @IsString() but no @IsOptional(). Once ValidationPipe is added, this field becomes required even though the DB column is nullable.",
+      "fix": "Add @IsOptional() decorator before @IsString() on the description field."
+    },
+    {
+      "id": 21,
+      "severity": "LOW",
+      "file": "src/modules/auth/guards/jwt-auth.guard.ts",
+      "title": "Unused Reflector injection",
+      "description": "Reflector is injected in JwtAuthGuard but never used in the guard body, suppressed only by an eslint-disable comment.",
+      "fix": "Remove the Reflector injection or implement IsPublic() skip logic that was likely intended."
+    },
+    {
+      "id": 22,
+      "severity": "LOW",
+      "file": "package.json",
+      "title": "Unused @nestjs/microservices dependency",
+      "description": "@nestjs/microservices is listed as a production dependency but no microservices transport is used.",
+      "fix": "Remove @nestjs/microservices from package.json."
+    },
+    {
+      "id": 23,
+      "severity": "LOW",
+      "file": "N/A",
+      "title": "No database migration workflow documented",
+      "description": "drizzle-kit is installed but there are no migration scripts or documentation. drizzle-kit push works only in dev; production needs generate + migrate.",
+      "fix": "Add drizzle:generate and drizzle:migrate scripts to package.json and document the workflow in README.md."
+    },
+    {
+      "id": 24,
+      "severity": "LOW",
+      "file": "src/db/schema.ts, src/modules/tracking/services/batch/batch.service.ts",
+      "title": "locationLogs missing eventId FK",
+      "description": "locationLogs only stores userId. Filtering historical logs by event requires joining through eventParticipants.",
+      "fix": "Add an eventId integer FK to the locationLogs table."
+    }
+  ],
+  "issueCountBySeverity": {
+    "CRITICAL": 5,
+    "HIGH": 5,
+    "MEDIUM": 7,
+    "LOW": 7
+  }
+}

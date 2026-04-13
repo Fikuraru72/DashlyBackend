@@ -55,13 +55,14 @@ async function seed() {
             });
             console.log(`Created user ${userData.email} with password: ${userData.password}`);
         } else {
-            console.log(`User already exists: ${userData.email}`);
-            // Ensure the user has the correct role just in case
-            const expectedRoleId = roleMap[userData.roleName];
-            if (user.roleId !== expectedRoleId) {
-                await db.update(schema.users).set({ roleId: expectedRoleId }).where(eq(schema.users.email, userData.email));
-                console.log(`Updated ${userData.email} to role ${userData.roleName}`);
-            }
+            console.log(`Updating user credentials: ${userData.email}`);
+            const hashedPassword = await bcrypt.hash(userData.password, 10);
+            await db.update(schema.users)
+                .set({ 
+                    password: hashedPassword, 
+                    roleId: roleMap[userData.roleName] 
+                })
+                .where(eq(schema.users.email, userData.email));
         }
     }
 

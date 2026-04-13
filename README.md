@@ -12,6 +12,7 @@ Dashly is a high-performance, real-time location tracking and event management b
 - **Real-Time Broadcasting**: WebSockets (Socket.io)
 
 ### How Data Flows
+
 1. **Runners (Mobile App / Participants)** publish their GPS coordinates at high frequency (e.g., every 3s) via **MQTT** to the EMQX broker. MQTT provides low latency and low battery overhead for mobile clients.
 2. **NestJS (`MqttService`)** subscribes to the EMQX broker, validating and ingesting the location data.
 3. The data is instantly written to **Redis** for fast, ephemeral state storage and geospatial calculations (e.g., distancing, anomalies).
@@ -23,6 +24,7 @@ Dashly is a high-performance, real-time location tracking and event management b
 ## 🛠️ Prerequisites
 
 Make sure you have the following installed to run this project:
+
 - Node.js (v18+)
 - `pnpm` or `npm`
 - Docker & Docker Compose (for PostgreSQL, Redis, and EMQX)
@@ -32,13 +34,17 @@ Make sure you have the following installed to run this project:
 ## 📦 Setup & Installation
 
 ### 1. Start External Services (Infrastructure)
+
 Ensure you have your Docker containers running for PostgreSQL, Redis, and EMQX.
+
 ```bash
 docker-compose up -d
 ```
-*(Note: If you are running these services manually or externally, make sure they match the ports in your `.env` file).*
+
+_(Note: If you are running these services manually or externally, make sure they match the ports in your `.env` file)._
 
 ### 2. Install Dependencies
+
 ```bash
 pnpm install
 # or
@@ -46,7 +52,9 @@ npm install
 ```
 
 ### 3. Environment Variables
+
 Create a `.env` file in the root directory (or use the provided `.env.example` if available) and configure your connection strings:
+
 ```env
 # Database
 DATABASE_URL="postgres://postgres:password@localhost:5432/dashly"
@@ -64,7 +72,9 @@ REDIS_PORT=6379
 ```
 
 ### 4. Database Schema & Seeding
+
 Push the database schema using Drizzle, and then seed the database with the initial roles and MVP test data.
+
 ```bash
 # Push schema to PostgreSQL
 pnpm run db:push    # or npx drizzle-kit push
@@ -74,10 +84,12 @@ npx ts-node src/db/seed-prototype.ts
 ```
 
 ### 5. Start the Backend Server
+
 ```bash
 # Development watchdog mode
 pnpm run start:dev  # or npm run start:dev
 ```
+
 The REST API and WebSocket server will both be available at `http://localhost:3000`.
 
 ---
@@ -90,17 +102,19 @@ Make sure your backend server (`npm run start:dev`) is already running.
 
 1. **Start the Dashboard Simulator (Admin)**
    Open a new terminal window and run:
+
    ```bash
    npx ts-node prototype/admin-simulation.ts
    ```
-   *This script logs in as the Super Admin, grabs the current Active Event, connects to the WebSocket room, and listens for live location updates.*
+
+   _This script logs in as the Super Admin, grabs the current Active Event, connects to the WebSocket room, and listens for live location updates._
 
 2. **Start the Runner Simulators (Participants)**
    Open another new terminal window and run:
    ```bash
    npx ts-node prototype/participant-simulation.ts
    ```
-   *This script logs in 10 mock runners simultaneously and starts blasting coordinates (with slight randomized jitter) to the MQTT broker over a predetermined path.*
+   _This script logs in 10 mock runners simultaneously and starts blasting coordinates (with slight randomized jitter) to the MQTT broker over a predetermined path._
 
 **If successful**, you will immediately see live GPS coordinates streaming into your **Admin Terminal** via WebSockets!
 
@@ -109,8 +123,9 @@ Make sure your backend server (`npm run start:dev`) is already running.
 ## 🔐 Authentication & Roles
 
 The system uses JWT for securing Endpoints and Socket rooms. There are three core roles seeded by default:
+
 - `SUPER_ADMIN` (`admin@dashly.com`) - Full access to manage events.
 - `STAFF` (`staff@dashly.com`) - Can view and manage assigned events.
 - `PARTICIPANT` (`participant@dashly.com` / `runnerX@dashly.com`) - Mobile users who can join events and broadcast locations.
 
-*(All seeded user passwords are: `password123`)*
+_(All seeded user passwords are: `password123`)_

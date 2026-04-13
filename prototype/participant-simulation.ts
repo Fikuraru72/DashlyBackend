@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as mqtt from 'mqtt';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = 'http://localhost:3001';
 const MQTT_URL = 'mqtt://localhost:1883'; // Configured in .env
 
 // Mock Route -> User moving slightly
@@ -122,4 +122,12 @@ async function runParticipantSimulation() {
     }
 }
 
-runParticipantSimulation();
+async function runContinuousSimulation() {
+    while (true) {
+        await runParticipantSimulation();
+        console.log('🏁 Simulation round finished. Restarting in 10 seconds...');
+        await sleep(10000);
+    }
+}
+
+runContinuousSimulation();

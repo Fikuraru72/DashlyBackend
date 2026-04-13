@@ -1,32 +1,34 @@
-import { IsNotEmpty, IsNumber, IsString, IsOptional, IsObject, IsDateString, IsIn } from 'class-validator';
+import { IsNumber, IsString, IsOptional, IsObject, IsDateString, IsIn } from 'class-validator';
 
-export class CreateEventDto {
+export class UpdateEventDto {
+    @IsOptional()
     @IsString()
-    @IsNotEmpty()
-    name!: string;
+    name?: string;
 
+    @IsOptional()
     @IsString()
-    description!: string;
+    description?: string;
 
+    @IsOptional()
     @IsNumber()
-    maxParticipants!: number;
+    maxParticipants?: number;
 
+    @IsOptional()
     @IsDateString()
-    @IsNotEmpty()
-    dateEvent!: string;
+    dateEvent?: string;
 
     @IsOptional()
     @IsString()
     @IsIn(['RUNNING', 'CYCLING'])
     category?: string;
 
+    @IsOptional()
     @IsDateString()
-    @IsNotEmpty()
-    startTime!: string;
+    startTime?: string;
 
+    @IsOptional()
     @IsDateString()
-    @IsNotEmpty()
-    endTime!: string;
+    endTime?: string;
 
     @IsOptional()
     @IsNumber()

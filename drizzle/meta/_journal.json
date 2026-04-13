@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1774985011869,
+      "tag": "0000_uneven_prodigy",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775102209901,
+      "tag": "0001_race_management_refactor",
+      "breakpoints": true
+    }
+  ]
+}

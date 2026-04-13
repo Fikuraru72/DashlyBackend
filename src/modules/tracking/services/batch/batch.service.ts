@@ -6,9 +6,10 @@ import * as schema from '../../../../../src/db/schema';
 
 export interface LocationLogPayload {
     userId: number;
-    latitude: string;
-    longitude: string;
-    speed: string | null;
+    eventId: number;
+    latitude: number;
+    longitude: number;
+    speed: number | null;
     isOffline: boolean;
     timestamp: Date;
 }
@@ -44,4 +45,3 @@ export class BatchService {
         }
     }
 }
-

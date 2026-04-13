@@ -36,21 +36,14 @@ services:
       timeout: 5s
       retries: 5
 
-  emqx:
-    image: emqx/emqx:5.8
-    container_name: dashly_emqx
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: dashly_mosquitto
     restart: always
-    environment:
-      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
-      EMQX_DASHBOARD__DEFAULT_PASSWORD: public
     ports:
-      - "1883:1883"     # MQTT/TCP
-      - "8083:8083"     # MQTT/WS
-      - "8084:8084"     # MQTT/WSS
-      - "18083:18083"   # EMQX Dashboard
+      - "1883:1883"
     volumes:
-      - emqx_data:/opt/emqx/data
-      - emqx_log:/opt/emqx/log
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
     networks:
       - dashly-network
 
@@ -61,5 +54,3 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  emqx_data:
-  emqx_log:

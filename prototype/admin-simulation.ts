@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { io } from 'socket.io-client';
 
-const API_URL = 'http://localhost:3000';
-// In your main.ts, the backend is running on port 3000. 
+const API_URL = 'http://localhost:3001';
+const MQTT_URL = 'mqtt://localhost:1883'; // Based on docker-compose running on port 3000. 
 // Socket.io often binds to the same port.
 const SOCKET_URL = 'http://localhost:3000';
 
