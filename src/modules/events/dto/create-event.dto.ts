@@ -1,42 +1,91 @@
-import { IsNotEmpty, IsNumber, IsString, IsOptional, IsObject, IsDateString, IsIn } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  IsOptional,
+  IsObject,
+  IsDateString,
+  IsIn,
+  IsInt,
+} from 'class-validator';
 
 export class CreateEventDto {
-    @IsString()
-    @IsNotEmpty()
-    name!: string;
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
 
-    @IsString()
-    description!: string;
+  @IsString()
+  description!: string;
 
-    @IsNumber()
-    maxParticipants!: number;
+  @IsNumber()
+  maxParticipants!: number;
 
-    @IsDateString()
-    @IsNotEmpty()
-    dateEvent!: string;
+  @IsDateString()
+  @IsNotEmpty()
+  dateEvent!: string;
 
-    @IsOptional()
-    @IsString()
-    @IsIn(['RUNNING', 'CYCLING'])
-    category?: string;
+  @IsOptional()
+  @IsString()
+  @IsIn(['RUNNING', 'CYCLING'])
+  category?: string;
 
-    @IsDateString()
-    @IsNotEmpty()
-    startTime!: string;
+  @IsDateString()
+  @IsNotEmpty()
+  startTime!: string;
 
-    @IsDateString()
-    @IsNotEmpty()
-    endTime!: string;
+  @IsDateString()
+  @IsNotEmpty()
+  endTime!: string;
 
-    @IsOptional()
-    @IsNumber()
-    monitoringStartOffset?: number;
+  @IsOptional()
+  @IsInt()
+  monitoringStartOffset?: number;
 
-    @IsOptional()
-    @IsNumber()
-    monitoringEndOffset?: number;
+  @IsOptional()
+  @IsInt()
+  monitoringEndOffset?: number;
 
-    @IsOptional()
-    @IsObject()
-    routeGeojson?: any;
+  @IsOptional()
+  @IsNumber()
+  totalDistanceMeters?: number;
+
+  @IsOptional()
+  @IsNumber()
+  totalElevationMeters?: number;
+
+  @IsOptional()
+  @IsDateString()
+  registrationOpen?: string;
+
+  @IsOptional()
+  @IsDateString()
+  registrationClose?: string;
+
+  @IsOptional()
+  @IsString()
+  locationName?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  province?: string;
+
+  @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
+  @IsOptional()
+  @IsString()
+  bannerImage?: string;
+
+  @IsOptional()
+  @IsObject()
+  routeGeojson?: any;
 }

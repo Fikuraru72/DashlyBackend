@@ -1,9 +1,25 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { EventsService } from './events.service';
+import { GpxParserService } from './gpx-parser.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { UpdateEventStatusDto } from './dto/update-event-status.dto';
 import { JoinEventDto } from './dto/join-event.dto';
+import { VerifyBibDto } from './dto/verify-bib.dto';
+
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -12,73 +28,119 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EventsController {
-    constructor(private readonly eventsService: EventsService) { }
+  constructor(
+    private readonly eventsService: EventsService,
+    private readonly gpxParser: GpxParserService,
+  ) {}
 
-    @Post()
-    @Roles('SUPER_ADMIN', 'STAFF')
-    async createEvent(@CurrentUser() user: any, @Body() dto: CreateEventDto) {
-        return this.eventsService.createEvent(user, dto);
+  @Post('upload-gpx')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGpx(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new Error('No file provided');
     }
+    const gpxString = file.buffer.toString('utf-8');
+    const parsed = this.gpxParser.parseGpx(gpxString);
+    return { success: true, data: parsed };
+  }
 
-    @Get()
-    @Roles('SUPER_ADMIN', 'STAFF')
-    async getAllEvents(@CurrentUser() user: any) {
-        return this.eventsService.getAllEvents(user);
-    }
+  @Post()
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async createEvent(@CurrentUser() user: any, @Body() dto: CreateEventDto) {
+    return this.eventsService.createEvent(user, dto);
+  }
 
-    @Get('my-events')
-    @Roles('PARTICIPANT')
-    async getMyEvents(@CurrentUser() user: any) {
-        return this.eventsService.getMyEvents(user);
-    }
+  @Get()
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async getAllEvents(@CurrentUser() user: any) {
+    return this.eventsService.getAllEvents(user);
+  }
 
-    @Get(':id')
-    @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
-    async getEventById(@Param('id') id: string, @CurrentUser() user: any) {
-        return this.eventsService.getEventById(+id, user);
-    }
+  @Get('my-events')
+  @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
+  async getMyEvents(@CurrentUser() user: any) {
+    return this.eventsService.getMyEvents(user);
+  }
 
-    @Put(':id')
-    @Roles('SUPER_ADMIN', 'STAFF')
-    async updateEvent(
-        @Param('id') id: string,
-        @CurrentUser() user: any,
-        @Body() dto: UpdateEventDto,
-    ) {
-        return this.eventsService.updateEvent(+id, user, dto);
-    }
+  @Get('explore')
+  @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
+  async getExploreEvents() {
+    return this.eventsService.getExploreEvents();
+  }
 
-    @Put(':id/status')
-    @Roles('SUPER_ADMIN', 'STAFF')
-    async updateEventStatus(
-        @Param('id') id: string,
-        @CurrentUser() user: any,
-        @Body() dto: UpdateEventStatusDto,
-    ) {
-        return this.eventsService.updateEventStatus(+id, user, dto);
-    }
+  @Get(':id/live')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async getLivePositions(@Param('id') id: string) {
+    return this.eventsService.getLivePositions(+id);
+  }
 
-    @Delete(':id')
-    @Roles('SUPER_ADMIN', 'STAFF')
-    async deleteEvent(@Param('id') id: string, @CurrentUser() user: any) {
-        return this.eventsService.deleteEvent(+id, user);
-    }
+  @Get(':id/participants')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async getParticipants(@Param('id') id: string) {
+    return this.eventsService.getParticipants(+id);
+  }
 
-    @Post('join')
-    @Roles('PARTICIPANT')
-    async joinEvent(@CurrentUser() user: any, @Body() dto: JoinEventDto) {
-        return this.eventsService.joinEvent(user, dto);
+  @Get(':id')
+  @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
+  async getEventById(@Param('id') id: string, @CurrentUser() user: any) {
+    const eventId = +id;
+    if (isNaN(eventId)) {
+      throw new BadRequestException('Invalid event ID');
     }
+    return this.eventsService.getEventById(eventId, user);
+  }
 
-    @Get(':id/participants')
-    @Roles('SUPER_ADMIN', 'STAFF')
-    async getParticipants(@Param('id') id: string) {
-        return this.eventsService.getParticipants(+id);
-    }
+  @Put(':id')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async updateEvent(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() dto: UpdateEventDto,
+  ) {
+    return this.eventsService.updateEvent(+id, user, dto);
+  }
 
-    @Get(':id/positions')
-    @Roles('SUPER_ADMIN', 'STAFF')
-    async getEventPositions(@Param('id') id: string) {
-        return this.eventsService.getEventPositions(+id);
-    }
+  @Put(':id/status')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async updateEventStatus(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() dto: UpdateEventStatusDto,
+  ) {
+    return this.eventsService.updateEventStatus(+id, user, dto);
+  }
+
+  @Delete(':id')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async deleteEvent(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.eventsService.deleteEvent(+id, user);
+  }
+
+  @Post(':id/join')
+  @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
+  async joinEvent(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.eventsService.joinEvent(user, +id);
+  }
+
+  @Post(':id/verify-bib')
+  @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
+  async verifyBib(@Param('id') id: string, @Body() dto: VerifyBibDto, @CurrentUser() user: any) {
+    return this.eventsService.verifyBib(user, +id, dto.bibNumber);
+  }
+
+  @Post('join-via-token')
+  @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
+  async joinEventViaToken(@Body() dto: JoinEventDto, @CurrentUser() user: any) {
+    console.log('[DEBUG] join-via-token requested by user:', user);
+    return this.eventsService.joinEventViaToken(user, dto.token);
+  }
+
+
+
+  @Get(':id/positions')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async getEventPositions(@Param('id') id: string) {
+    return this.eventsService.getEventPositions(+id);
+  }
 }

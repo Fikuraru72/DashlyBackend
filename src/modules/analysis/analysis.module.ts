@@ -5,6 +5,6 @@ import { RedisModule } from '../redis/redis.module';
 @Module({
   imports: [RedisModule],
   providers: [AnalysisService],
-  exports: [AnalysisService]
+  exports: [AnalysisService],
 })
-export class AnalysisModule { }
+export class AnalysisModule {}
