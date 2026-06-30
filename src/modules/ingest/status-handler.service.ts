@@ -69,6 +69,13 @@ export class StatusHandlerService {
         .set({ participantState: 'TRACKING' })
         .where(eq(schema.eventParticipants.id, participantId));
 
+      // CRITICAL FIX: Update Redis so TrackingEnrichmentConsumer knows they are TRACKING!
+      await this.redisService['redisClient'].hset(
+        `participant_stats:${participantId}`,
+        'participantState',
+        'TRACKING',
+      );
+
       this.logger.log(
         `[Status Handler] ✅ Participant ${participantId} successfully transitioned to TRACKING state`,
       );
