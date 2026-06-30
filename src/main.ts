@@ -13,8 +13,12 @@ async function bootstrap() {
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
-  // 1. Enable CORS agar Flutter tidak diblokir browser/engine
-  app.enableCors();
+  // 1. Enable CORS
+  app.enableCors({
+    origin: true, // Allow all origins explicitly
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+  });
   // 2. Listen di 0.0.0.0 agar bisa diakses oleh IP 192.168.x.x
   const port = process.env.PORT ?? 3001; // Tetap gunakan port dari .env (3001)
   await app.listen(port, '0.0.0.0');
