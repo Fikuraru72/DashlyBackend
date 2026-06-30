@@ -19,8 +19,8 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
-  // 2. Listen di 0.0.0.0 agar bisa diakses oleh IP 192.168.x.x
-  const port = process.env.PORT ?? 3001; // Tetap gunakan port dari .env (3001)
+  // 2. Listen di 0.0.0.0
+  const port = process.env.PORT ?? 3000;
   await app.listen(port, '0.0.0.0');
 
   console.log(`Application is running on: http://0.0.0.0:${port}`);
