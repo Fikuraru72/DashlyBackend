@@ -48,6 +48,7 @@ export class EventsService {
     // Get real names and state from DB in a single query
     const participantRows = await this.db
       .select({
+        participantId: schema.eventParticipants.id,
         userId: schema.eventParticipants.userId,
         name: schema.users.name,
         state: schema.eventParticipants.participantState,
@@ -60,14 +61,15 @@ export class EventsService {
       )
       .where(eq(schema.eventParticipants.eventId, eventId));
 
-    const infoMap = new Map(participantRows.map((p) => [p.userId, p]));
+    const infoMap = new Map(participantRows.map((p) => [p.participantId, p]));
 
     return positions.map((p) => {
-      const info = infoMap.get(p.userId);
+      const info = infoMap.get(p.participantId);
       return {
         ...p,
+        userId: info?.userId || p.userId, // Fix: Overwrite userId from DB if Redis had the wrong one
         isOffline: p.isOffline === 'true' || p.isOffline === true,
-        name: info?.name || `Runner ${p.userId}`,
+        name: info?.name || `Runner ${info?.userId || p.userId}`,
         state: info?.state || 'TRACKING',
         bibNumber: info?.bibNumber || '-',
       };
@@ -862,7 +864,7 @@ export class EventsService {
    */
   async updateParticipantState(
     eventId: number,
-    participantId: number,
+    userId: number,
     newState: string,
   ) {
     const validStates = ['REGISTERED', 'CONFIRMED', 'TRACKING', 'FROZEN', 'FINISHED'];
@@ -873,21 +875,24 @@ export class EventsService {
     }
 
     const participant = await this.db.query.eventParticipants.findFirst({
-      where: eq(schema.eventParticipants.id, participantId),
+      where: and(
+        eq(schema.eventParticipants.userId, userId),
+        eq(schema.eventParticipants.eventId, eventId)
+      ),
     });
 
-    if (!participant || participant.eventId !== eventId) {
+    if (!participant) {
       throw new NotFoundException('Participant not found in this event');
     }
 
     const [updated] = await this.db
       .update(schema.eventParticipants)
       .set({ participantState: newState as any })
-      .where(eq(schema.eventParticipants.id, participantId))
+      .where(eq(schema.eventParticipants.id, participant.id))
       .returning();
 
     this.logger.log(
-      `[Events] Participant ${participantId} state changed: ${participant.participantState} → ${newState}`,
+      `[Events] Participant (User ${userId}) state changed: ${participant.participantState} → ${newState}`,
     );
 
     return {
