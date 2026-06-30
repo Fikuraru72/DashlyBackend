@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { DB_CONNECTION } from '../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -24,6 +25,8 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
+
   constructor(
     @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
     private readonly redisService: RedisService,
@@ -851,5 +854,46 @@ export class EventsService {
     return this.db.query.events.findMany({
       where: eq(schema.events.status, 'LIVE'),
     });
+  }
+
+  /**
+   * Update a participant's state (e.g., unfreeze a FROZEN participant).
+   * Only accessible by SUPER_ADMIN or STAFF.
+   */
+  async updateParticipantState(
+    eventId: number,
+    participantId: number,
+    newState: string,
+  ) {
+    const validStates = ['REGISTERED', 'CONFIRMED', 'TRACKING', 'FROZEN', 'FINISHED'];
+    if (!validStates.includes(newState)) {
+      throw new BadRequestException(
+        `Invalid participant state. Must be one of: ${validStates.join(', ')}`,
+      );
+    }
+
+    const participant = await this.db.query.eventParticipants.findFirst({
+      where: eq(schema.eventParticipants.id, participantId),
+    });
+
+    if (!participant || participant.eventId !== eventId) {
+      throw new NotFoundException('Participant not found in this event');
+    }
+
+    const [updated] = await this.db
+      .update(schema.eventParticipants)
+      .set({ participantState: newState as any })
+      .where(eq(schema.eventParticipants.id, participantId))
+      .returning();
+
+    this.logger.log(
+      `[Events] Participant ${participantId} state changed: ${participant.participantState} → ${newState}`,
+    );
+
+    return {
+      success: true,
+      data: updated,
+      message: `Participant state updated to ${newState}`,
+    };
   }
 }

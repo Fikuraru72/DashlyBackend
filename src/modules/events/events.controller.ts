@@ -143,4 +143,18 @@ export class EventsController {
   async getEventPositions(@Param('id') id: string) {
     return this.eventsService.getEventPositions(+id);
   }
+
+  @Put(':eventId/participants/:participantId/state')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async updateParticipantState(
+    @Param('eventId') eventId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: { state: string },
+  ) {
+    return this.eventsService.updateParticipantState(
+      +eventId,
+      +participantId,
+      body.state,
+    );
+  }
 }
