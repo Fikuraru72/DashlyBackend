@@ -47,7 +47,7 @@ export function getMonitoringWindow(
   let status: MonitoringWindow['status'];
   if (event.status === 'FINISHED') {
     status = 'FINISHED';
-  } else if (event.status === 'START') {
+  } else if (event.status === 'LIVE') {
     status = 'LIVE';
   } else if (now >= actualStart) {
     status = 'READY_TO_START';

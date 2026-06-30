@@ -20,7 +20,7 @@ export class EventCacheService {
     @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
   ) {}
 
-  /** Returns the event status ('IDLE' | 'START' | 'FINISHED') or null if not found. */
+  /** Returns the event status ('IDLE' | 'LIVE' | 'FINISHED') or null if not found. */
   async getEventStatus(eventId: number): Promise<string | null> {
     // 1. Check Redis cache (10s TTL)
     const cached = await this.redisService.getCachedEventStatus(eventId);

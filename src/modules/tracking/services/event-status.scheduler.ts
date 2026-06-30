@@ -24,9 +24,9 @@ export class EventStatusScheduler {
     this.logger.debug('Running auto race start/end check...');
 
     try {
-      // Fetch events that are IDLE or START
+      // Fetch events that are IDLE or READY or LIVE
       const activeEvents = await this.db.query.events.findMany({
-        where: inArray(schema.events.status, ['IDLE', 'START']),
+        where: inArray(schema.events.status, ['IDLE', 'READY', 'LIVE']),
       });
 
       for (const event of activeEvents) {
@@ -44,21 +44,21 @@ export class EventStatusScheduler {
 
         const now = new Date();
 
-        // Check if we need to START the event
-        if (event.status === 'IDLE' && now >= window.actualStart) {
+        // Check if we need to LIVE the event
+        if ((event.status === 'IDLE' || event.status === 'READY') && now >= window.actualStart) {
           await this.db
             .update(schema.events)
-            .set({ status: 'START' })
+            .set({ status: 'LIVE' })
             .where(eq(schema.events.id, event.id));
 
-          this.eventsGateway.broadcastEventStatus(event.id, 'START');
+          this.eventsGateway.broadcastEventStatus(event.id, 'LIVE');
           this.logger.log(
-            `Event ${event.id} automatically changed status to START`,
+            `Event ${event.id} automatically changed status to LIVE`,
           );
         }
 
         // Check if we need to FINISH the event
-        if (event.status === 'START' && now >= window.actualEnd) {
+        if (event.status === 'LIVE' && now >= window.actualEnd) {
           await this.db
             .update(schema.events)
             .set({ status: 'FINISHED' })

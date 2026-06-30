@@ -17,7 +17,7 @@ export class AdminService {
     const activeEventsResult = await this.db
       .select()
       .from(schema.events)
-      .where(eq(schema.events.status, 'START'));
+      .where(eq(schema.events.status, 'LIVE'));
 
     const activeEventIds = activeEventsResult.map((e) => e.id);
 

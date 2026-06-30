@@ -373,27 +373,28 @@ export class EventsService {
     const result = await this.getEventById(eventId, user);
     const event = result.data;
 
-    // Validation: START only allowed if monitoring window is open
-    if (dto.status === 'START') {
-      if (!isMonitoringWindowOpen(event)) {
+    // Validation: LIVE only allowed if monitoring window is open
+    if (dto.status === 'LIVE') {
+      const window = getMonitoringWindow(event);
+      if (!window || !window.isOpen) {
         throw new BadRequestException(
           'Cannot start event: monitoring window is not open yet. The current time must be within the monitoring window.',
         );
       }
     }
 
-    // Validation: FINISHED only allowed if current status is START
+    // Validation: FINISHED only allowed if current status is LIVE
     if (dto.status === 'FINISHED') {
-      if (event.status !== 'START') {
+      if (event.status !== 'LIVE') {
         throw new BadRequestException(
-          'Cannot finish event: event must be in START status first.',
+          'Cannot finish event: event must be in LIVE status first.',
         );
       }
     }
 
     const [updatedEvent] = await this.db
       .update(schema.events)
-      .set({ status: dto.status as 'IDLE' | 'START' | 'FINISHED' })
+      .set({ status: dto.status as any })
       .where(eq(schema.events.id, eventId))
       .returning();
 
@@ -516,7 +517,7 @@ export class EventsService {
         throw new NotFoundException('Event not found');
       }
 
-      // Allow joining during IDLE or START — tracking is gated by interlock screen
+      // Allow joining during IDLE or LIVE — tracking is gated by interlock screen
       if (event.status === 'FINISHED') {
         throw new ForbiddenException('Event has already finished');
       }
@@ -628,7 +629,7 @@ export class EventsService {
         throw new NotFoundException('Event not found or invalid token');
       }
 
-      // Allow joining during IDLE or START
+      // Allow joining during IDLE or LIVE
       if (event.status === 'FINISHED') {
         throw new ForbiddenException('Event has already finished');
       }
@@ -843,12 +844,12 @@ export class EventsService {
   }
 
   /**
-   * Get all events that are currently active (status = START).
+   * Get all events that are currently active (status = LIVE).
    * Used for Redis rehydration on server restart.
    */
   async getActiveEvents() {
     return this.db.query.events.findMany({
-      where: eq(schema.events.status, 'START'),
+      where: eq(schema.events.status, 'LIVE'),
     });
   }
 }

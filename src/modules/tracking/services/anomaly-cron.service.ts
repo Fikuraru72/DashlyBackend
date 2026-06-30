@@ -23,7 +23,7 @@ export class AnomalyCronService {
     try {
       // 1. Get all active events from DB
       const activeEvents = await this.db.query.events.findMany({
-        where: eq(schema.events.status, 'START'),
+        where: eq(schema.events.status, 'LIVE'),
       });
 
       for (const event of activeEvents) {

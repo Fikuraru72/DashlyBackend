@@ -12,7 +12,7 @@ import {
  *
  * Responsibilities:
  *   1. Resolve participantId → userId (via IdentityCacheService)
- *   2. Verify event is in START status (via EventCacheService)
+ *   2. Verify event is in LIVE status (via EventCacheService)
  *   3. Type coercion (parseFloat, Date)
  *   4. Construct TrackingEvent with EMPTY flags
  *   5. Publish to tracking-events-raw queue
@@ -39,7 +39,7 @@ export class TrackingValidatorService {
   async processLocation(raw: RawIngestPayload): Promise<boolean> {
     // 1. Check event status
     const eventStatus = await this.eventCache.getEventStatus(raw.eventId);
-    if (eventStatus !== 'START') {
+    if (eventStatus !== 'LIVE') {
       this.logger.debug(
         `[Validator] Dropping: event ${raw.eventId} status is '${eventStatus || 'NOT_FOUND'}'`,
       );

@@ -37,9 +37,9 @@ export class StatusHandlerService {
         where: eq(schema.events.id, eventId),
       });
 
-      if (!ev || ev.status !== 'START') {
+      if (!ev || ev.status !== 'LIVE') {
         this.logger.warn(
-          `[Status Handler] Participant ${participantId} tried to go ONLINE but event ${eventId} is not START`,
+          `[Status Handler] Participant ${participantId} tried to go ONLINE but event ${eventId} is not LIVE`,
         );
         return;
       }
