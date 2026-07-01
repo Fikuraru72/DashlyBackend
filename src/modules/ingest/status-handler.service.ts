@@ -79,6 +79,29 @@ export class StatusHandlerService {
       this.logger.log(
         `[Status Handler] ✅ Participant ${participantId} successfully transitioned to TRACKING state`,
       );
+
+      const pos = await this.redisService.getParticipantPosition(
+        eventId,
+        participantId,
+      );
+      const stats = await this.redisService.getParticipantStats(participantId);
+
+      if (pos) {
+        this.gateway.broadcastPositionUpdate(eventId, {
+          participantId,
+          userId,
+          eventId,
+          lat: pos.lat,
+          lng: pos.lng,
+          speed: stats.speed ? parseFloat(stats.speed) : 0,
+          status: 'moving',
+          state: 'TRACKING',
+          battery: stats.battery ? parseInt(stats.battery, 10) : 100,
+          isOffline: false,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       return;
     }
 

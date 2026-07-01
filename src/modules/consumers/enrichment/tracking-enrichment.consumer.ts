@@ -80,8 +80,7 @@ export class TrackingEnrichmentConsumer
       this.configService.get('ENABLE_RANKING', 'true') !== 'false';
     this.enableOffRoute =
       this.configService.get('ENABLE_OFFROUTE', 'true') !== 'false';
-    this.enableStopDetection =
-      this.configService.get('ENABLE_STOP_DETECTION', 'true') !== 'false';
+    this.enableStopDetection = false;
 
     this.logger.log(
       `Feature flags: ranking=${this.enableRanking}, offRoute=${this.enableOffRoute}, stopDetection=${this.enableStopDetection}`,
