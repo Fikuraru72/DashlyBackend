@@ -39,10 +39,10 @@ export class TrackingStreamService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.rawQueue = new Queue(QUEUE_TRACKING_RAW, {
-      connection: this.connection,
+      connection: this.connection as any,
     });
     this.enrichedQueue = new Queue(QUEUE_TRACKING_ENRICHED, {
-      connection: this.connection,
+      connection: this.connection as any,
     });
 
     this.logger.log(

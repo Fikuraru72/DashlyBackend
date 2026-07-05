@@ -48,7 +48,7 @@ export class WsPublisherConsumer implements OnModuleInit, OnModuleDestroy {
         this.process(job.data);
       },
       {
-        connection: this.workerConnection,
+        connection: this.workerConnection as any,
         concurrency: 20, // Non-blocking socket emits
       },
     );

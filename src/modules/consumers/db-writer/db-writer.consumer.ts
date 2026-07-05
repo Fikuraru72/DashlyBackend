@@ -54,7 +54,7 @@ export class DbWriterConsumer implements OnModuleInit, OnModuleDestroy {
         }
       },
       {
-        connection: this.workerConnection,
+        connection: this.workerConnection as any,
         concurrency: 5,
       },
     );

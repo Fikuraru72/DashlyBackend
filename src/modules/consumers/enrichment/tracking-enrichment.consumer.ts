@@ -94,7 +94,7 @@ export class TrackingEnrichmentConsumer
         await this.process(job.data);
       },
       {
-        connection: this.workerConnection,
+        connection: this.workerConnection as any,
         concurrency: 1,
       },
     );
