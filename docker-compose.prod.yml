@@ -51,19 +51,6 @@ services:
     networks:
       - dashly-network
 
-  osrm-bicycle:
-    image: osrm/osrm-backend:latest
-    container_name: dashly_osrm_bicycle
-    restart: always
-    command: osrm-routed --algorithm mld /data/map.osrm
-    ports:
-      - "127.0.0.1:5000:5000"
-    volumes:
-      - ./osrm-data/bicycle:/data:ro
-    mem_limit: 768m
-    networks:
-      - dashly-network
-
 networks:
   dashly-network:
     driver: bridge

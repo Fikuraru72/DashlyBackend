@@ -14,7 +14,6 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { EventsService } from './events.service';
 import { GpxParserService } from './gpx-parser.service';
-import { OsrmService } from './osrm.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { UpdateEventStatusDto } from './dto/update-event-status.dto';
@@ -32,7 +31,6 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly gpxParser: GpxParserService,
-    private readonly osrmService: OsrmService,
   ) {}
 
   @Post('upload-gpx')
@@ -44,26 +42,11 @@ export class EventsController {
     }
     const gpxString = file.buffer.toString('utf-8');
     const parsed = this.gpxParser.parseGpx(gpxString);
-    const category = this.readCategory(file.originalname);
-    const normalized = await this.osrmService.normalizeRoute(
-      category,
-      parsed.geoJson,
-    );
 
     return {
       success: true,
-      data: normalized
-        ? {
-            ...parsed,
-            geoJson: normalized.geoJson,
-            totalDistanceMeters: normalized.totalDistanceMeters,
-          }
-        : parsed,
+      data: parsed,
     };
-  }
-
-  private readCategory(filename?: string): 'RUNNING' | 'CYCLING' {
-    return filename?.toLowerCase().includes('cycling') ? 'CYCLING' : 'RUNNING';
   }
 
   @Post()

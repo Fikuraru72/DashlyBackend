@@ -5,40 +5,21 @@ Target:
 - Frontend: Vercel or Cloudflare Pages
 - Backend: VPS
 - DB: local Postgres container or Supabase
-- Redis, Mosquitto, OSRM: VPS Docker
+- Redis, Mosquitto: VPS Docker
 - Reverse proxy: Caddy
 
 ## Is 2 CPU / 2GB enough?
 
 Enough for MVP if:
 
-- OSRM uses East Java only.
-- OSRM preprocessing is done on laptop/bigger machine, not VPS.
-- Only one OSRM service: bicycle.
 - VPS has 4GB swap.
-- Postgres/Redis/MQTT/OSRM are not publicly exposed.
+- Postgres/Redis/MQTT are not publicly exposed.
 
 Not enough for:
 
-- Full Indonesia OSRM.
-- OSRM preprocessing on VPS.
 - Large concurrent events.
 
-## 1. Prepare OSRM data locally
-
-Run on laptop/dev machine. Works on Linux/macOS/Windows as long as Docker is running:
-
-```bash
-vp run osrm:prepare
-```
-
-Upload to VPS:
-
-```bash
-rsync -av osrm-data/bicycle/ user@VPS_IP:/opt/dashly/DashlyBackend/osrm-data/bicycle/
-```
-
-## 2. Bootstrap VPS
+## 1. Bootstrap VPS
 
 ```bash
 ssh user@VPS_IP
@@ -78,9 +59,6 @@ REDIS_PORT=6379
 MQTT_HOST=localhost
 MQTT_PORT=1883
 
-OSRM_ENABLED=true
-OSRM_BICYCLE_URL=http://localhost:5000
-OSRM_PBF_URL=https://geo2day.com/asia/indonesia/east_java.pbf
 ```
 
 ### Option B: Supabase Postgres
@@ -100,9 +78,6 @@ REDIS_PORT=6379
 MQTT_HOST=localhost
 MQTT_PORT=1883
 
-OSRM_ENABLED=true
-OSRM_BICYCLE_URL=http://localhost:5000
-OSRM_PBF_URL=https://geo2day.com/asia/indonesia/east_java.pbf
 ```
 
 Notes:
@@ -112,21 +87,7 @@ Notes:
 - Keep `sslmode=require`.
 - Supabase free is okay for MVP, but watch DB size, connection limits, and latency.
 
-## 4. Upload OSRM data if not done
-
-From local machine:
-
-```bash
-rsync -av osrm-data/bicycle/ user@VPS_IP:/opt/dashly/DashlyBackend/osrm-data/bicycle/
-```
-
-Check on VPS:
-
-```bash
-ls -lh /opt/dashly/DashlyBackend/osrm-data/bicycle/map.osrm
-```
-
-## 5. Install systemd service
+## 4. Install systemd service
 
 On VPS:
 
@@ -173,7 +134,7 @@ Already handled by `prod-bootstrap.sh`:
 
 ```text
 Open: 22, 80, 443
-Closed/public-blocked: 3000, 5432, 6379, 1883, 5000
+Closed/public-blocked: 3000, 5432, 6379, 1883
 ```
 
 Verify:
@@ -189,7 +150,6 @@ Expected Docker port binds are `127.0.0.1`, not `0.0.0.0`.
 
 ```bash
 curl https://api.example.com
-curl 'http://localhost:5000/route/v1/bike/112.7521,-7.2575;112.6326,-7.9666?overview=full&geometries=geojson'
 sudo journalctl -u dashly-backend -f
 ```
 
@@ -215,12 +175,11 @@ Bisa untuk:
 Tidak cocok untuk full backend ini:
 
 - NestJS long-running server
-- OSRM native service
 - Redis
 - MQTT TCP broker
 - Postgres
 
-Cloudflare Workers free juga tidak cocok untuk backend ini karena backend butuh long-running Node server, Docker services, TCP/MQTT, dan OSRM. Tetap butuh VPS.
+Cloudflare Workers free juga tidak cocok untuk backend ini karena backend butuh long-running Node server, Docker services, dan TCP/MQTT. Tetap butuh VPS.
 
 Cloudflare Tunnel bisa dipakai supaya VPS tidak expose port 80/443 langsung, tapi untuk MVP Caddy + firewall lebih simpel.
 
@@ -247,7 +206,6 @@ sudo journalctl -u dashly-backend -f
 sudo systemctl restart dashly-backend
 
 # docker logs
-docker logs -f dashly_osrm_bicycle
 docker logs -f dashly_redis
 docker logs -f dashly_mosquitto
 

@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventsService } from './events.service';
 import { DB_CONNECTION } from '../../db/database.module';
 import { RedisService } from '../redis/redis.service';
-import { OsrmService } from './osrm.service';
 import { JwtService } from '@nestjs/jwt';
 import {
   NotFoundException,
@@ -24,7 +23,6 @@ describe('EventsService', () => {
   let service: EventsService;
   let dbMock: any;
   let redisMock: any;
-  let osrmMock: any;
 
   beforeEach(async () => {
     dbMock = {
@@ -56,17 +54,12 @@ describe('EventsService', () => {
     redisMock = {
       getAllParticipantPositions: jest.fn(),
     };
-    osrmMock = {
-      normalizeRoute: jest.fn().mockResolvedValue(null),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventsService,
         { provide: DB_CONNECTION, useValue: dbMock },
         { provide: RedisService, useValue: redisMock },
         { provide: JwtService, useValue: { sign: jest.fn() } },
-        { provide: OsrmService, useValue: osrmMock },
       ],
     }).compile();
 

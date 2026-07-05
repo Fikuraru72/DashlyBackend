@@ -6,11 +6,6 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-if [ ! -f osrm-data/bicycle/map.osrm ]; then
-  echo "osrm-data/bicycle/map.osrm not found. Run vp run osrm:prepare on laptop, then rsync osrm-data/bicycle/ here."
-  exit 1
-fi
-
 if command -v vp >/dev/null 2>&1; then
   VP=vp
 elif [ -x "$HOME/.vite-plus/bin/vp" ]; then
@@ -26,7 +21,7 @@ if grep -q 'DATABASE_URL=.*localhost:5432\|DATABASE_URL=.*127.0.0.1:5432' .env; 
 else
   docker compose -f docker-compose.prod.yml stop postgres 2>/dev/null || true
   docker compose -f docker-compose.prod.yml rm -f postgres 2>/dev/null || true
-  docker compose -f docker-compose.prod.yml up -d redis mosquitto osrm-bicycle
+  docker compose -f docker-compose.prod.yml up -d redis mosquitto
 fi
 
 $VP install

@@ -25,4 +25,4 @@ sudo firewall-cmd --permanent --add-service=https
 sudo firewall-cmd --reload
 sudo setsebool -P httpd_can_network_connect 1
 
-echo "OK. Next: clone repo, upload osrm-data/bicycle, create .env, run scripts/prod-deploy.sh"
+echo "OK. Next: clone repo, create .env, run scripts/prod-deploy.sh"
