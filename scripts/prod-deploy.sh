@@ -16,6 +16,6 @@ docker rm -f dashly_backend dashly_osrm_bicycle dashly_postgres 2>/dev/null || t
 
 $COMPOSE build app
 $COMPOSE up -d redis mosquitto
-$COMPOSE run --rm app bunx drizzle-kit migrate
+$COMPOSE run --rm app bunx drizzle-kit push --force
 $COMPOSE up -d app
 $COMPOSE ps
