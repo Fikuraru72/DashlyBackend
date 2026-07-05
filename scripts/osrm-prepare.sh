@@ -2,16 +2,16 @@
 set -euo pipefail
 
 OSRM_IMAGE="${OSRM_IMAGE:-osrm/osrm-backend:latest}"
-OSRM_PBF_URL="${OSRM_PBF_URL:-https://download.geofabrik.de/asia/indonesia/java-latest.osm.pbf}"
+OSRM_PBF_URL="${OSRM_PBF_URL:-https://geo2day.com/asia/indonesia/east_java.pbf}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_DIR="$ROOT_DIR/osrm-data"
 PBF_PATH="$DATA_DIR/map.osm.pbf"
 
-# MVP map: Java extract, small enough for local dev/East Java-ish demo.
+# MVP map: East Java extract, small enough for 2 CPU / 2GB RAM.
 # Later when app is ready for wider deployment, switch to full Indonesia:
 # OSRM_PBF_URL=https://download.geofabrik.de/asia/indonesia-latest.osm.pbf
 
-mkdir -p "$DATA_DIR/bicycle" "$DATA_DIR/foot"
+mkdir -p "$DATA_DIR/bicycle"
 
 if [ ! -f "$PBF_PATH" ]; then
   echo "Downloading OSM extract: $OSRM_PBF_URL"
@@ -40,6 +40,5 @@ prepare_profile() {
 }
 
 prepare_profile bicycle bicycle
-prepare_profile foot foot
 
-echo "OSRM data ready. Run: docker compose up -d osrm-bicycle osrm-foot"
+echo "OSRM data ready. Run: docker compose up -d osrm-bicycle"

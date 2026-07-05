@@ -58,7 +58,7 @@ describe('OsrmService', () => {
     const service = new OsrmService(
       new ConfigService({
         OSRM_ENABLED: 'true',
-        OSRM_FOOT_URL: 'http://osrm-foot:5000',
+        OSRM_BICYCLE_URL: 'http://osrm-bike:5000',
       }),
     );
     jest.spyOn(global, 'fetch').mockResolvedValue({
@@ -69,6 +69,9 @@ describe('OsrmService', () => {
 
     const result = await service.normalizeRoute('RUNNING', rawRoute);
 
+    expect(fetch).toHaveBeenCalledWith(
+      'http://osrm-bike:5000/route/v1/bike/106.8227,-6.1744;106.8287,-6.1804?overview=full&geometries=geojson&steps=false',
+    );
     expect(result?.geoJson).toEqual(rawRoute);
     expect(result?.totalDistanceMeters).toBeGreaterThan(0);
   });

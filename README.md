@@ -10,7 +10,7 @@ Real-time event tracking backend for Dashly. Built with NestJS, PostgreSQL, Driz
 - Cache/geospatial state: Redis
 - Ingestion broker: MQTT
 - Realtime updates: Socket.IO
-- Route normalization: OSRM bicycle and foot profiles
+- Route normalization: OSRM bicycle profile
 - Package manager: `vp`
 
 ## Data flow
@@ -83,15 +83,13 @@ Dashly uses OSRM only for fixed event routes:
 
 No tracking ingestion route is normalized through OSRM.
 
-Profiles:
+Profile:
 
-- Cycling uses `osrm-profiles/bicycle.lua`
-- Running uses `osrm-profiles/foot.lua`
+- Cycling and running both use `osrm-profiles/bicycle.lua`.
 
 Behavior:
 
-- Cycling prefers cycleways, paths, residential roads, and safer roads.
-- Running prefers footways, pedestrian ways, paths, and tracks.
+- Routes prefer cycleways, paths, residential roads, and safer roads.
 - Primary and secondary vehicle roads are penalized.
 - If OSRM fails or is offline, backend falls back to the raw route.
 
@@ -107,14 +105,13 @@ Start OSRM services:
 vp run osrm:up
 ```
 
-OSRM services:
+OSRM service:
 
 ```text
 bicycle: http://localhost:5000
-foot:    http://localhost:5001
 ```
 
-Current MVP map extract is Java. To switch to full Indonesia later, update `OSRM_PBF_URL` in `.env` and rerun `vp run osrm:prepare`.
+Current MVP map extract is East Java. To switch to full Indonesia later, update `OSRM_PBF_URL` in `.env` and rerun `vp run osrm:prepare`.
 
 ## Commands
 
@@ -197,6 +194,5 @@ MQTT_HOST=localhost
 MQTT_PORT=1883
 OSRM_ENABLED=true
 OSRM_BICYCLE_URL=http://localhost:5000
-OSRM_FOOT_URL=http://localhost:5001
-OSRM_PBF_URL=https://download.geofabrik.de/asia/indonesia/java-latest.osm.pbf
+OSRM_PBF_URL=https://geo2day.com/asia/indonesia/east_java.pbf
 ```

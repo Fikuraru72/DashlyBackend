@@ -43,7 +43,7 @@ export class OsrmService {
       const coordinatePath = coordinates
         .map(([lng, lat]) => `${lng},${lat}`)
         .join(';');
-      const profile = category === 'CYCLING' ? 'bike' : 'foot';
+      const profile = 'bike';
       const url = `${baseUrl}/route/v1/${profile}/${coordinatePath}?overview=full&geometries=geojson&steps=false`;
 
       const response = await fetch(url);
@@ -78,9 +78,8 @@ export class OsrmService {
     }
   }
 
-  private getBaseUrl(category: EventCategory): string | null {
-    const key = category === 'CYCLING' ? 'OSRM_BICYCLE_URL' : 'OSRM_FOOT_URL';
-    const url = this.configService.get<string>(key);
+  private getBaseUrl(_category: EventCategory): string | null {
+    const url = this.configService.get<string>('OSRM_BICYCLE_URL');
     return url ? url.replace(/\/$/, '') : null;
   }
 

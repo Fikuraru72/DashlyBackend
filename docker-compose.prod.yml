@@ -3,18 +3,20 @@ services:
     image: postgres:16-alpine
     container_name: dashly_postgres
     restart: always
+    profiles: ["local-db"]
     environment:
-      POSTGRES_DB: dashly_db
-      POSTGRES_USER: dashly_user
-      POSTGRES_PASSWORD: dashly_password
+      POSTGRES_DB: ${POSTGRES_DB:-dashly_db}
+      POSTGRES_USER: ${POSTGRES_USER:-dashly_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    mem_limit: 512m
     networks:
       - dashly-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d dashly_db -U dashly_user"]
+      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB:-dashly_db} -U ${POSTGRES_USER:-dashly_user}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,11 +25,12 @@ services:
     image: redis:7-alpine
     container_name: dashly_redis
     restart: always
-    command: redis-server --save 60 1 --loglevel warning
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 128mb --maxmemory-policy allkeys-lru
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
+    mem_limit: 160m
     networks:
       - dashly-network
     healthcheck:
@@ -41,23 +44,25 @@ services:
     container_name: dashly_mosquitto
     restart: always
     ports:
-      - "1883:1883"
+      - "127.0.0.1:1883:1883"
     volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    mem_limit: 64m
     networks:
       - dashly-network
 
   osrm-bicycle:
     image: osrm/osrm-backend:latest
     container_name: dashly_osrm_bicycle
+    restart: always
     command: osrm-routed --algorithm mld /data/map.osrm
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
-      - ./osrm-data/bicycle:/data
+      - ./osrm-data/bicycle:/data:ro
+    mem_limit: 768m
     networks:
       - dashly-network
-
 
 networks:
   dashly-network:
