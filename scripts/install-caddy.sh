@@ -13,5 +13,9 @@ $DOMAIN {
 }
 EOF
 
+sudo setsebool -P httpd_can_network_connect 1
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
 sudo systemctl reload caddy
 echo "Caddy configured for https://$DOMAIN"

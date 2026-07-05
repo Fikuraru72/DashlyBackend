@@ -1,4 +1,4 @@
-vp run db:reset-- Bicycle profile
+-- Bicycle profile
 
 api_version = 4
 

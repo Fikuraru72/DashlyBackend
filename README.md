@@ -93,7 +93,7 @@ Behavior:
 - Primary and secondary vehicle roads are penalized.
 - If OSRM fails or is offline, backend falls back to the raw route.
 
-Prepare OSRM data:
+Prepare OSRM data on Linux, macOS, or Windows with Docker Desktop:
 
 ```bash
 vp run osrm:prepare

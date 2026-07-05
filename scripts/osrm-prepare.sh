@@ -27,13 +27,13 @@ prepare_profile() {
   rm -f "$target"/*
   cp "$PBF_PATH" "$target/map.osm.pbf"
 
-  docker run --rm -t \
+  docker run --rm -t --cpus 1.5 \
     -v "$target:/data" \
     -v "$ROOT_DIR/osrm-profiles:/profiles:ro" \
     "$OSRM_IMAGE" osrm-extract -p "/profiles/$profile.lua" /data/map.osm.pbf
-  docker run --rm -t -v "$target:/data" "$OSRM_IMAGE" \
+  docker run --rm -t --cpus 1.5 -v "$target:/data" "$OSRM_IMAGE" \
     osrm-partition /data/map.osrm
-  docker run --rm -t -v "$target:/data" "$OSRM_IMAGE" \
+  docker run --rm -t --cpus 1.5 -v "$target:/data" "$OSRM_IMAGE" \
     osrm-customize /data/map.osrm
 
   rm -f "$target/map.osm.pbf"

@@ -26,7 +26,7 @@ Not enough for:
 
 ## 1. Prepare OSRM data locally
 
-Run on laptop/dev machine:
+Run on laptop/dev machine. Works on Linux/macOS/Windows as long as Docker is running:
 
 ```bash
 vp run osrm:prepare
