@@ -15,14 +15,7 @@ else
   exit 1
 fi
 
-# Use --profile local-db if DATABASE_URL points to local docker postgres.
-if grep -q 'DATABASE_URL=.*localhost:5432\|DATABASE_URL=.*127.0.0.1:5432' .env; then
-  docker compose -f docker-compose.prod.yml --profile local-db up -d
-else
-  docker compose -f docker-compose.prod.yml stop postgres 2>/dev/null || true
-  docker compose -f docker-compose.prod.yml rm -f postgres 2>/dev/null || true
-  docker compose -f docker-compose.prod.yml up -d redis mosquitto
-fi
+docker compose -f docker-compose.prod.yml up -d redis mosquitto
 
 $VP install
 $VP run build
