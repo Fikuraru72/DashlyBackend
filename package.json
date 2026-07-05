@@ -11,9 +11,12 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main.js",
     "seed": "ts-node src/db/seed.ts",
-    "db:reset": "ts-node src/db/reset.ts && npx drizzle-kit push --force && ts-node src/db/seed.ts",
+    "db:reset": "ts-node src/db/reset.ts && vp exec drizzle-kit push --force && ts-node src/db/seed.ts",
+    "osrm:prepare": "bash scripts/osrm-prepare.sh",
+    "osrm:up": "docker compose up -d osrm-bicycle osrm-foot",
+    "osrm:e2e:k6": "bash scripts/k6-osrm-e2e.sh",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -106,5 +109,12 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.10.0",
+      "onFail": "download"
+    }
   }
 }

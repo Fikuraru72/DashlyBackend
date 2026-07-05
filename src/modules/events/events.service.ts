@@ -19,6 +19,7 @@ import {
   isMonitoringWindowOpen,
 } from './monitoring.helper';
 import { RedisService } from '../redis/redis.service';
+import { OsrmService } from './osrm.service';
 import { JwtService } from '@nestjs/jwt';
 import * as qrcode from 'qrcode';
 import * as bcrypt from 'bcrypt';
@@ -31,6 +32,7 @@ export class EventsService {
     @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
     private readonly redisService: RedisService,
     private readonly jwtService: JwtService,
+    private readonly osrmService: OsrmService,
   ) { }
 
   async getEventPositions(eventId: number) {
@@ -77,6 +79,11 @@ export class EventsService {
   }
 
   async createEvent(user: any, dto: CreateEventDto) {
+    const category = (dto.category as 'RUNNING' | 'CYCLING') || 'RUNNING';
+    const normalizedRoute = dto.routeGeojson
+      ? await this.osrmService.normalizeRoute(category, dto.routeGeojson)
+      : null;
+
     return this.db.transaction(async (tx) => {
       // 1. Generate unique 6-char alphanumeric code
       const tokenCode = Math.random()
@@ -90,13 +97,14 @@ export class EventsService {
         .values({
           name: dto.name,
           description: dto.description,
-          category: (dto.category as 'RUNNING' | 'CYCLING') || 'RUNNING',
+          category,
           status: 'IDLE',
           token: tokenCode, // Keep legacy field populated for compatibility
           maxParticipants: dto.maxParticipants,
           dateEvent: new Date(dto.dateEvent),
-          routeGeojson: dto.routeGeojson,
-          totalDistanceMeters: dto.totalDistanceMeters,
+          routeGeojson: normalizedRoute?.geoJson ?? dto.routeGeojson,
+          totalDistanceMeters:
+            normalizedRoute?.totalDistanceMeters ?? dto.totalDistanceMeters,
           totalElevationMeters: dto.totalElevationMeters,
           startTime: new Date(dto.startTime),
           endTime: new Date(dto.endTime),
@@ -415,7 +423,7 @@ export class EventsService {
   }
 
   async updateEvent(eventId: number, user: any, dto: UpdateEventDto) {
-    await this.getEventById(eventId, user); // verifies ownership/existence
+    const existing = await this.getEventById(eventId, user); // verifies ownership/existence
 
     const updateData: any = {};
     if (dto.name !== undefined) updateData.name = dto.name;
@@ -424,8 +432,19 @@ export class EventsService {
       updateData.maxParticipants = dto.maxParticipants;
     if (dto.dateEvent !== undefined)
       updateData.dateEvent = new Date(dto.dateEvent);
-    if (dto.routeGeojson !== undefined)
-      updateData.routeGeojson = dto.routeGeojson;
+    if (dto.routeGeojson !== undefined) {
+      const category = (dto.category ?? existing.data.category) as
+        | 'RUNNING'
+        | 'CYCLING';
+      const normalizedRoute = await this.osrmService.normalizeRoute(
+        category,
+        dto.routeGeojson,
+      );
+      updateData.routeGeojson = normalizedRoute?.geoJson ?? dto.routeGeojson;
+      if (normalizedRoute) {
+        updateData.totalDistanceMeters = normalizedRoute.totalDistanceMeters;
+      }
+    }
     if (dto.category !== undefined) updateData.category = dto.category;
     if (dto.startTime !== undefined)
       updateData.startTime = new Date(dto.startTime);

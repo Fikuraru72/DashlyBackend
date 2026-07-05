@@ -1,131 +1,202 @@
 # Dashly Backend
 
-Dashly is a high-performance, real-time location tracking and event management backend. It is designed to handle high-frequency GPS telemetry from thousands of mobile devices, process anomalies in real-time, and broadcast live updates to a web dashboard.
+Real-time event tracking backend for Dashly. Built with NestJS, PostgreSQL, Drizzle ORM, Redis, MQTT, Socket.IO, and OSRM route normalization.
 
-## 🚀 Tech Stack & Architecture
+## Stack
 
-- **Framework**: [NestJS](https://nestjs.com/) (Node.js)
-- **Database**: PostgreSQL
-- **ORM**: [Drizzle ORM](https://orm.drizzle.team/)
-- **In-Memory Store & Geospatial**: Redis
-- **Message Broker (Ingestion)**: EMQX (MQTT)
-- **Real-Time Broadcasting**: WebSockets (Socket.io)
+- Framework: NestJS
+- Database: PostgreSQL
+- ORM: Drizzle ORM
+- Cache/geospatial state: Redis
+- Ingestion broker: MQTT
+- Realtime updates: Socket.IO
+- Route normalization: OSRM bicycle and foot profiles
+- Package manager: `vp`
 
-### How Data Flows
+## Data flow
 
-1. **Runners (Mobile App / Participants)** publish their GPS coordinates at high frequency (e.g., every 3s) via **MQTT** to the EMQX broker. MQTT provides low latency and low battery overhead for mobile clients.
-2. **NestJS (`MqttService`)** subscribes to the EMQX broker, validating and ingesting the location data.
-3. The data is instantly written to **Redis** for fast, ephemeral state storage and geospatial calculations (e.g., distancing, anomalies).
-4. The live data is then broadcasted via **WebSockets (`EventsGateway`)** to any connected admin dashboards or spectator screens.
-5. In the background, data points are batched and periodically flushed to **PostgreSQL** for persistent tracking history.
+1. Mobile participants publish GPS telemetry over MQTT.
+2. Backend validates and ingests telemetry.
+3. Latest positions and geospatial state live in Redis.
+4. Live updates are broadcast over Socket.IO.
+5. Historical tracking data is persisted to PostgreSQL.
+6. Fixed event routes are normalized through OSRM before storage or GPX upload response.
 
----
+## Prerequisites
 
-## 🛠️ Prerequisites
+- Node.js 24+
+- `vp`
+- Docker and Docker Compose
 
-Make sure you have the following installed to run this project:
+## Setup
 
-- Node.js (v18+)
-- `pnpm` or `npm`
-- Docker & Docker Compose (for PostgreSQL, Redis, and EMQX)
-
----
-
-## 📦 Setup & Installation
-
-### 1. Start External Services (Infrastructure)
-
-Ensure you have your Docker containers running for PostgreSQL, Redis, and EMQX.
+Install dependencies:
 
 ```bash
-docker-compose up -d
+vp install
 ```
 
-_(Note: If you are running these services manually or externally, make sure they match the ports in your `.env` file)._
-
-### 2. Install Dependencies
+Copy env file:
 
 ```bash
-pnpm install
-# or
-npm install
+cp .env.example .env
 ```
 
-### 3. Environment Variables
+Start infrastructure:
 
-Create a `.env` file in the root directory (or use the provided `.env.example` if available) and configure your connection strings:
+```bash
+docker compose up -d postgres redis mosquitto
+```
+
+Prepare database:
+
+```bash
+vp exec drizzle-kit push
+vp run seed
+```
+
+Start backend:
+
+```bash
+vp run start:dev
+```
+
+API runs at:
+
+```text
+http://localhost:3000
+```
+
+Default seeded admin:
+
+```text
+admin@dashly.com / password123
+```
+
+## OSRM route normalization
+
+Dashly uses OSRM only for fixed event routes:
+
+- `POST /events/upload-gpx`
+- `POST /events`
+- `PUT /events/:id`
+
+No tracking ingestion route is normalized through OSRM.
+
+Profiles:
+
+- Cycling uses `osrm-profiles/bicycle.lua`
+- Running uses `osrm-profiles/foot.lua`
+
+Behavior:
+
+- Cycling prefers cycleways, paths, residential roads, and safer roads.
+- Running prefers footways, pedestrian ways, paths, and tracks.
+- Primary and secondary vehicle roads are penalized.
+- If OSRM fails or is offline, backend falls back to the raw route.
+
+Prepare OSRM data:
+
+```bash
+vp run osrm:prepare
+```
+
+Start OSRM services:
+
+```bash
+vp run osrm:up
+```
+
+OSRM services:
+
+```text
+bicycle: http://localhost:5000
+foot:    http://localhost:5001
+```
+
+Current MVP map extract is Java. To switch to full Indonesia later, update `OSRM_PBF_URL` in `.env` and rerun `vp run osrm:prepare`.
+
+## Commands
+
+Build:
+
+```bash
+vp run build
+```
+
+Run production build:
+
+```bash
+vp run start:prod
+```
+
+Format:
+
+```bash
+vp run format
+```
+
+Lint:
+
+```bash
+vp run lint
+```
+
+Unit tests:
+
+```bash
+vp run test
+```
+
+E2E tests:
+
+```bash
+vp run test:e2e
+```
+
+OSRM k6 e2e load test under constrained runtime:
+
+```bash
+vp run osrm:e2e:k6
+```
+
+Custom load:
+
+```bash
+VUS=20 DURATION=1m vp run osrm:e2e:k6
+```
+
+The k6 script runs the backend with:
+
+- 2 CPU cores via `taskset -c 0,1`
+- 2 GB Node heap via `NODE_OPTIONS=--max-old-space-size=2048`
+- k6 Docker runner limited to 2 CPU and 2 GB RAM
+
+## Authentication and roles
+
+JWT protects private HTTP routes and WebSocket connections.
+
+Seeded roles:
+
+- `SUPER_ADMIN`: full event access
+- `STAFF`: assigned event management
+- `PARTICIPANT`: event join and tracking user
+
+Seeded passwords are `password123`.
+
+## Environment variables
+
+Required core variables:
 
 ```env
-# Database
-DATABASE_URL="postgres://postgres:password@localhost:5432/dashly"
-
-# JWT Auth
-JWT_SECRET="your_super_secret_key"
-
-# MQTT Broker (EMQX)
-MQTT_HOST="localhost"
-MQTT_PORT=1883
-
-# Redis
-REDIS_HOST="localhost"
+DATABASE_URL=postgres://dashly_user:dashly_password@localhost:5432/dashly_db
+JWT_SECRET=change_me
+REDIS_HOST=localhost
 REDIS_PORT=6379
+MQTT_HOST=localhost
+MQTT_PORT=1883
+OSRM_ENABLED=true
+OSRM_BICYCLE_URL=http://localhost:5000
+OSRM_FOOT_URL=http://localhost:5001
+OSRM_PBF_URL=https://download.geofabrik.de/asia/indonesia/java-latest.osm.pbf
 ```
-
-### 4. Database Schema & Seeding
-
-Push the database schema using Drizzle, and then seed the database with the initial roles and MVP test data.
-
-```bash
-# Push schema to PostgreSQL
-pnpm run db:push    # or npx drizzle-kit push
-
-# Seed the MVP Prototype data (Roles, Users, Mocks)
-npx ts-node src/db/seed-prototype.ts
-```
-
-### 5. Start the Backend Server
-
-```bash
-# Development watchdog mode
-pnpm run start:dev  # or npm run start:dev
-```
-
-The REST API and WebSocket server will both be available at `http://localhost:3000`.
-
----
-
-## 🧪 Running the MVP Prototype Simulation
-
-To verify that the entire end-to-end telemetry pipeline is working (REST -> MQTT -> Redis -> NestJS -> WebSockets) without needing a frontend or mobile app, you can run the provided prototype simulators.
-
-Make sure your backend server (`npm run start:dev`) is already running.
-
-1. **Start the Dashboard Simulator (Admin)**
-   Open a new terminal window and run:
-
-   ```bash
-   npx ts-node prototype/admin-simulation.ts
-   ```
-
-   _This script logs in as the Super Admin, grabs the current Active Event, connects to the WebSocket room, and listens for live location updates._
-
-2. **Start the Runner Simulators (Participants)**
-   Open another new terminal window and run:
-   ```bash
-   npx ts-node prototype/participant-simulation.ts
-   ```
-   _This script logs in 10 mock runners simultaneously and starts blasting coordinates (with slight randomized jitter) to the MQTT broker over a predetermined path._
-
-**If successful**, you will immediately see live GPS coordinates streaming into your **Admin Terminal** via WebSockets!
-
----
-
-## 🔐 Authentication & Roles
-
-The system uses JWT for securing Endpoints and Socket rooms. There are three core roles seeded by default:
-
-- `SUPER_ADMIN` (`admin@dashly.com`) - Full access to manage events.
-- `STAFF` (`staff@dashly.com`) - Can view and manage assigned events.
-- `PARTICIPANT` (`participant@dashly.com` / `runnerX@dashly.com`) - Mobile users who can join events and broadcast locations.
-
-_(All seeded user passwords are: `password123`)_
