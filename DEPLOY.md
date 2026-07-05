@@ -1,31 +1,29 @@
-# Dashly Production Deploy: 2 CPU / 2GB RAM
+# Dashly Production Deploy: Rocky Linux VPS
 
 Target:
 
 - Frontend: Vercel or Cloudflare Pages
-- Backend: VPS
+- Backend: Rocky Linux VPS
 - DB: local Postgres container or Supabase
 - Redis, Mosquitto: VPS Docker
 - Route normalization: OSRM public demo server
 - Reverse proxy: Caddy
 
-## Is 2 CPU / 2GB enough?
+## Server size
 
-Enough for MVP if:
+2 CPU / 2GB RAM is enough for MVP if:
 
 - VPS has 4GB swap.
-- Postgres/Redis/MQTT are not publicly exposed.
+- Postgres/Redis/MQTT bind to localhost only.
+- OSRM uses the public demo server, not local Docker.
 
-Not enough for:
-
-- Large concurrent events.
+Not enough for large concurrent events. Use Supabase if local Postgres eats too much RAM.
 
 ## 1. Bootstrap VPS
 
 ```bash
-ssh user@VPS_IP
-sudo mkdir -p /opt/dashly
-sudo chown $USER:$USER /opt/dashly
+ssh root@VPS_IP
+mkdir -p /opt/dashly
 cd /opt/dashly
 git clone <backend-repo-url> DashlyBackend
 cd DashlyBackend
@@ -35,11 +33,10 @@ bash scripts/prod-bootstrap.sh
 Install/copy `vp` if missing:
 
 ```bash
-# install vp using your normal Vite Plus install flow
 which vp || echo "install vp first"
 ```
 
-## 3. Create `.env`
+## 2. Create `.env`
 
 ### Option A: local Postgres on VPS
 
@@ -63,12 +60,9 @@ MQTT_PORT=1883
 OSRM_ENABLED=true
 OSRM_URL=https://router.project-osrm.org
 OSRM_PROFILE=bike
-
 ```
 
 ### Option B: Supabase Postgres
-
-Use Supabase if you want less RAM pressure on VPS.
 
 ```env
 NODE_ENV=production
@@ -86,19 +80,16 @@ MQTT_PORT=1883
 OSRM_ENABLED=true
 OSRM_URL=https://router.project-osrm.org
 OSRM_PROFILE=bike
-
 ```
 
 Notes:
 
 - Prefer Supabase pooler URL for app runtime.
-- For migrations, direct DB URL is also okay if Supabase allows it.
 - Keep `sslmode=require`.
-- Supabase free is okay for MVP, but watch DB size, connection limits, and latency.
+- Public OSRM demo is light-use only: keep under ~1 request/second, no SLA.
+- Backend falls back to raw GPX route if OSRM fails.
 
-## 4. Install systemd service
-
-On VPS:
+## 3. Install systemd service
 
 ```bash
 cd /opt/dashly/DashlyBackend
@@ -111,7 +102,7 @@ If `vp` path differs:
 VP_BIN=$(which vp) bash scripts/install-systemd.sh
 ```
 
-## 6. Deploy backend + infra
+## 4. Deploy backend + infra
 
 ```bash
 cd /opt/dashly/DashlyBackend
@@ -120,26 +111,24 @@ bash scripts/prod-deploy.sh
 
 What it does:
 
-- Starts Docker infra.
-- Uses local Postgres only when `DATABASE_URL` points to localhost.
-- Stops/removes local Postgres container when using Supabase.
+- Starts Redis and Mosquitto.
+- Starts local Postgres only when `DATABASE_URL` points to localhost.
+- Removes local Postgres container when using Supabase.
 - Builds backend.
 - Runs Drizzle migrations.
 - Restarts `dashly-backend` service.
 
-## 7. Configure HTTPS domain
+## 5. Configure HTTPS domain
 
 Point DNS `api.example.com` to VPS IP.
-
-Then:
 
 ```bash
 bash scripts/install-caddy.sh api.example.com
 ```
 
-## 8. Firewall
+## 6. Firewall
 
-Already handled by `prod-bootstrap.sh`:
+Handled by `prod-bootstrap.sh` on Rocky Linux using `firewalld`.
 
 ```text
 Open: 22, 80, 443
@@ -149,20 +138,26 @@ Closed/public-blocked: 3000, 5432, 6379, 1883
 Verify:
 
 ```bash
-sudo ufw status
+sudo firewall-cmd --list-all
 ss -tulpn
 ```
 
 Expected Docker port binds are `127.0.0.1`, not `0.0.0.0`.
 
-## 9. Smoke test
+## 7. Smoke test
 
 ```bash
 curl https://api.example.com
 sudo journalctl -u dashly-backend -f
 ```
 
-## 10. Frontend deploy
+Optional OSRM demo check:
+
+```bash
+curl 'https://router.project-osrm.org/route/v1/bike/106.8227,-6.1744;106.8287,-6.1804?overview=full&geometries=geojson&steps=false'
+```
+
+## 8. Frontend deploy
 
 Set frontend env:
 
@@ -172,38 +167,23 @@ NEXT_PUBLIC_API_URL=https://api.example.com
 
 Deploy to Vercel or Cloudflare Pages.
 
-## Cloudflare free: bisa?
+## Cloudflare free
 
-Bisa untuk:
+Good for:
 
 - DNS
 - TLS proxy
 - Frontend static/Next output on Cloudflare Pages
 - Proxy HTTPS API to VPS
 
-Tidak cocok untuk full backend ini:
+Not good for:
 
-- NestJS long-running server
+- NestJS long-running backend
 - Redis
 - MQTT TCP broker
 - Postgres
 
-Cloudflare Workers free juga tidak cocok untuk backend ini karena backend butuh long-running Node server, Docker services, dan TCP/MQTT. Tetap butuh VPS.
-
-Cloudflare Tunnel bisa dipakai supaya VPS tidak expose port 80/443 langsung, tapi untuk MVP Caddy + firewall lebih simpel.
-
-## Supabase: perlu ubah kode?
-
-Biasanya tidak.
-
-Cukup ganti `DATABASE_URL` ke Supabase Postgres dengan `sslmode=require`.
-
-Yang perlu diperhatikan:
-
-- Jangan jalankan local Postgres kalau pakai Supabase.
-- Migration tetap pakai `vp exec drizzle-kit migrate`.
-- Kalau koneksi pooler bermasalah saat migrate, pakai direct Supabase DB URL untuk migration.
-- Latency DB sedikit naik karena DB di luar VPS.
+Cloudflare Tunnel can hide VPS 80/443, but Caddy + firewall is simpler for MVP.
 
 ## Useful commands
 

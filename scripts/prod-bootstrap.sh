@@ -6,7 +6,7 @@ if [ ! -f /etc/rocky-release ]; then
   exit 1
 fi
 
-sudo dnf install -y dnf-plugins-core ca-certificates curl git policycoreutils-python-utils
+sudo dnf install -y dnf-plugins-core ca-certificates curl git firewalld policycoreutils-python-utils
 sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin caddy
 sudo systemctl enable --now docker caddy firewalld
