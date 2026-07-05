@@ -335,8 +335,12 @@ export class TrackingEnrichmentConsumer
           .where(eq(schema.eventParticipants.id, participantId));
         this.wsGateway.broadcastParticipantFinished(eventId, {
           participantId,
+          userId: event.userId,
+          lat,
+          lng,
           rank: rankResult.rank,
           score: rankResult.score,
+          timestamp: new Date().toISOString(),
         });
       }
 
