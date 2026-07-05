@@ -5,6 +5,7 @@ import { PublicEventsController } from './public-events.controller';
 import { DatabaseModule } from '../../db/database.module';
 import { RedisModule } from '../redis/redis.module';
 import { GpxParserService } from './gpx-parser.service';
+import { OsrmService } from './osrm.service';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
@@ -21,7 +22,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       }),
     }),
   ],
-  providers: [EventsService, GpxParserService],
+  providers: [EventsService, GpxParserService, OsrmService],
   controllers: [EventsController, PublicEventsController],
   exports: [EventsService, GpxParserService],
 })

@@ -1,6 +1,6 @@
 # Dashly Backend
 
-Real-time event tracking backend for Dashly. Built with NestJS, PostgreSQL, Drizzle ORM, Redis, MQTT, and Socket.IO.
+Real-time event tracking backend for Dashly. Built with NestJS, PostgreSQL, Drizzle ORM, Redis, MQTT, Socket.IO, and OSRM route normalization via public demo server.
 
 ## Stack
 
@@ -10,6 +10,7 @@ Real-time event tracking backend for Dashly. Built with NestJS, PostgreSQL, Driz
 - Cache/geospatial state: Redis
 - Ingestion broker: MQTT
 - Realtime updates: Socket.IO
+- Route normalization: OSRM public demo server
 - Package manager: `vp`
 
 ## Data flow
@@ -19,7 +20,7 @@ Real-time event tracking backend for Dashly. Built with NestJS, PostgreSQL, Driz
 3. Latest positions and geospatial state live in Redis.
 4. Live updates are broadcast over Socket.IO.
 5. Historical tracking data is persisted to PostgreSQL.
-6. Fixed event routes are stored from uploaded GPX/manual GeoJSON.
+6. Fixed event routes are normalized through OSRM public demo before storage when enabled.
 
 ## Prerequisites
 
@@ -71,6 +72,19 @@ Default seeded admin:
 ```text
 admin@dashly.com / password123
 ```
+
+
+## OSRM route normalization
+
+Dashly can normalize fixed event routes through the public OSRM demo server. No OSRM Docker service or local map data is required.
+
+```env
+OSRM_ENABLED=true
+OSRM_URL=https://router.project-osrm.org
+OSRM_PROFILE=bike
+```
+
+The public demo server is for light, non-commercial usage only. Keep usage under 1 request/second; backend falls back to the raw route if OSRM fails.
 
 ## Commands
 
@@ -134,4 +148,7 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 MQTT_HOST=localhost
 MQTT_PORT=1883
+OSRM_ENABLED=true
+OSRM_URL=https://router.project-osrm.org
+OSRM_PROFILE=bike
 ```

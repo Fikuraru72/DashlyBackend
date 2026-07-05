@@ -6,6 +6,7 @@ Target:
 - Backend: VPS
 - DB: local Postgres container or Supabase
 - Redis, Mosquitto: VPS Docker
+- Route normalization: OSRM public demo server
 - Reverse proxy: Caddy
 
 ## Is 2 CPU / 2GB enough?
@@ -59,6 +60,10 @@ REDIS_PORT=6379
 MQTT_HOST=localhost
 MQTT_PORT=1883
 
+OSRM_ENABLED=true
+OSRM_URL=https://router.project-osrm.org
+OSRM_PROFILE=bike
+
 ```
 
 ### Option B: Supabase Postgres
@@ -77,6 +82,10 @@ REDIS_PORT=6379
 
 MQTT_HOST=localhost
 MQTT_PORT=1883
+
+OSRM_ENABLED=true
+OSRM_URL=https://router.project-osrm.org
+OSRM_PROFILE=bike
 
 ```
 
