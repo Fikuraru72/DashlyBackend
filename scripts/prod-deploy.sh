@@ -6,22 +6,16 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-if command -v vp >/dev/null 2>&1; then
-  VP=vp
-elif [ -x "$HOME/.vite-plus/bin/vp" ]; then
-  VP="$HOME/.vite-plus/bin/vp"
-else
-  echo "vp not found. Install/copy vp first."
-  exit 1
-fi
+COMPOSE="docker compose -f docker-compose.prod.yml"
 
-docker compose -f docker-compose.prod.yml up -d redis mosquitto
+# Remove old host-service deployment if it exists.
+sudo systemctl disable --now dashly-backend 2>/dev/null || true
 
-$VP install
-$VP run build
-$VP exec drizzle-kit migrate
+# Remove old containers that may conflict with the new compose app container.
+docker rm -f dashly_backend dashly_osrm_bicycle dashly_postgres 2>/dev/null || true
 
-sudo systemctl daemon-reload
-sudo systemctl enable --now dashly-backend
-sudo systemctl restart dashly-backend
-sudo systemctl status dashly-backend --no-pager
+$COMPOSE build app
+$COMPOSE up -d redis mosquitto
+$COMPOSE run --rm app bunx drizzle-kit migrate
+$COMPOSE up -d app
+$COMPOSE ps

@@ -1,4 +1,21 @@
 services:
+  app:
+    build: .
+    container_name: dashly_backend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - redis
+      - mosquitto
+    mem_limit: 768m
+    networks:
+      - dashly-network
+
   redis:
     image: redis:7-alpine
     container_name: dashly_redis
