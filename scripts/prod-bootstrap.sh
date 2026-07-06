@@ -22,6 +22,7 @@ fi
 sudo firewall-cmd --permanent --add-service=ssh
 sudo firewall-cmd --permanent --add-service=http
 sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --permanent --add-port=1883/tcp
 sudo firewall-cmd --reload
 sudo setsebool -P httpd_can_network_connect 1
 

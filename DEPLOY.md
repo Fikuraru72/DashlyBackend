@@ -131,8 +131,8 @@ bash scripts/install-caddy.sh api.example.com
 Handled by `prod-bootstrap.sh` on Rocky Linux using `firewalld`.
 
 ```text
-Open: 22, 80, 443
-Closed/public-blocked: 3000, 5432, 6379, 1883
+Open: 22, 80, 443, 1883 (MQTT)
+Closed/public-blocked: 3000, 5432, 6379
 ```
 
 Verify:

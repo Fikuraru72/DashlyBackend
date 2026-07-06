@@ -43,9 +43,13 @@ export class OsrmService {
       const profile = this.getProfile(category);
       const url = `${this.getBaseUrl()}/route/v1/${profile}/${coordinatePath}?overview=full&geometries=geojson&steps=false`;
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(url, {
         headers: { 'User-Agent': 'dashly-backend/1.0' },
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       if (!response.ok) {
         throw new Error(`OSRM ${response.status}: ${await response.text()}`);
       }
