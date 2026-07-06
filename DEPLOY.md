@@ -51,10 +51,10 @@ POSTGRES_PASSWORD=CHANGE_ME
 
 JWT_SECRET=CHANGE_ME_LONG_RANDOM
 
-REDIS_HOST=localhost
+REDIS_HOST=redis
 REDIS_PORT=6379
 
-MQTT_HOST=localhost
+MQTT_HOST=mosquitto
 MQTT_PORT=1883
 
 OSRM_ENABLED=true
@@ -71,10 +71,10 @@ PORT=3000
 DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require
 JWT_SECRET=CHANGE_ME_LONG_RANDOM
 
-REDIS_HOST=localhost
+REDIS_HOST=redis
 REDIS_PORT=6379
 
-MQTT_HOST=localhost
+MQTT_HOST=mosquitto
 MQTT_PORT=1883
 
 OSRM_ENABLED=true
