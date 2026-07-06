@@ -76,8 +76,8 @@ export class WsPublisherConsumer implements OnModuleInit, OnModuleDestroy {
           participantId: event.participantId,
           userId: event.userId,
           eventId,
-          lat: event.lat,
-          lng: event.lng,
+          lat: event.intelligence?.snappedLat ?? event.lat,
+          lng: event.intelligence?.snappedLng ?? event.lng,
           speed: event.speedCalculated ?? event.speedFromClient,
           status: event.clientStatus,
           state: event.intelligence?.participantState || 'TRACKING',
@@ -101,7 +101,7 @@ export class WsPublisherConsumer implements OnModuleInit, OnModuleDestroy {
 
       case 'SYNC':
         this.gateway.broadcastSyncBatch(eventId, event.userId, [
-          { lat: event.lat, lng: event.lng, speed: event.speedFromClient },
+          { lat: event.intelligence?.snappedLat ?? event.lat, lng: event.intelligence?.snappedLng ?? event.lng, speed: event.speedFromClient },
         ]);
         break;
 

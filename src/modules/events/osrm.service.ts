@@ -87,6 +87,81 @@ export class OsrmService {
       .replace(/\/$/, '');
   }
 
+  /**
+   * Match a trajectory (array of raw GPS points) to the road network.
+   * Uses OSRM Match API (/match/v1) which applies Hidden Markov Model
+   * to find the most likely road path. Returns the snapped coordinate
+   * for the LAST point in the trajectory (i.e. the current position).
+   *
+   * Requires at least 2 points to form a trajectory.
+   * Returns null on failure (caller should fall back to geometric snap).
+   */
+  async matchTrajectory(
+    points: { lng: number; lat: number; timestamp: number }[],
+  ): Promise<{ lat: number; lng: number } | null> {
+    if (points.length < 2) return null;
+
+    if (this.configService.get('OSRM_ENABLED', 'true') === 'false') {
+      return null;
+    }
+
+    try {
+      const coordinatePath = points
+        .map((p) => `${p.lng},${p.lat}`)
+        .join(';');
+
+      // Timestamps help OSRM weight the HMM transitions by speed
+      const timestamps = points.map((p) => Math.round(p.timestamp / 1000));
+      const timestampParam = timestamps.join(';');
+
+      // radiuses: per-point GPS accuracy tolerance in meters (15m is reasonable for smartphones)
+      const radiuses = points.map(() => '15').join(';');
+
+      const profile = this.configService.get<string>('OSRM_PROFILE', 'bike');
+      const url =
+        `${this.getBaseUrl()}/match/v1/${profile}/${coordinatePath}` +
+        `?overview=false&geometries=geojson&timestamps=${timestampParam}&radiuses=${radiuses}`;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000); // 2s timeout (tight for live tracking)
+
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'dashly-backend/1.0' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        this.logger.warn(`OSRM Match API ${response.status}`);
+        return null;
+      }
+
+      const body = (await response.json()) as {
+        matchings?: Array<{ geometry?: { coordinates?: number[][] } }>;
+        tracepoints?: Array<{ location?: [number, number] } | null>;
+      };
+
+      // Use the tracepoint for the LAST input point — this is the snapped current position
+      const tracepoints = body.tracepoints;
+      if (!tracepoints || tracepoints.length === 0) return null;
+
+      // Find the last non-null tracepoint (OSRM may null-out unmatched points)
+      for (let i = tracepoints.length - 1; i >= 0; i--) {
+        const tp = tracepoints[i];
+        if (tp?.location) {
+          return { lng: tp.location[0], lat: tp.location[1] };
+        }
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.debug(
+        `OSRM Match failed (non-fatal): ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   private getProfile(_category: EventCategory): string {
     return this.configService.get<string>('OSRM_PROFILE', 'bike');
   }

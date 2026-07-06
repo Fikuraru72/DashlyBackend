@@ -28,6 +28,7 @@ import { RankingEngine } from '../intelligence/ranking.engine';
 import { OffRouteEngine } from '../intelligence/offroute.engine';
 import { StopDetectorEngine } from '../intelligence/stopdetector.engine';
 import { EventsGateway } from '../../websocket/events.gateway';
+import { OsrmService } from '../../events/osrm.service';
 
 /**
  * TrackingEnrichmentConsumer — HARDENED (Phase 1.5).
@@ -56,6 +57,7 @@ export class TrackingEnrichmentConsumer
   private enableRanking = true;
   private enableOffRoute = true;
   private enableStopDetection = true;
+  private enableMapMatching = true;
 
   // Observability counters
   private dropCountNoise = 0;
@@ -71,6 +73,7 @@ export class TrackingEnrichmentConsumer
     private readonly stopDetector: StopDetectorEngine,
     private readonly wsGateway: EventsGateway,
     private readonly configService: ConfigService,
+    private readonly osrmService: OsrmService,
     @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
   ) {}
 
@@ -80,7 +83,10 @@ export class TrackingEnrichmentConsumer
       this.configService.get('ENABLE_RANKING', 'true') !== 'false';
     this.enableOffRoute =
       this.configService.get('ENABLE_OFFROUTE', 'true') !== 'false';
-    this.enableStopDetection = false;
+    this.enableStopDetection =
+      this.configService.get('ENABLE_STOP_DETECTION', 'true') !== 'false';
+    this.enableMapMatching =
+      this.configService.get('ENABLE_MAP_MATCHING', 'true') !== 'false';
 
     this.logger.log(
       `Feature flags: ranking=${this.enableRanking}, offRoute=${this.enableOffRoute}, stopDetection=${this.enableStopDetection}`,
@@ -344,12 +350,42 @@ export class TrackingEnrichmentConsumer
         });
       }
 
-      // ── 8. Attach Intelligence Result ──────────────────────────
+      // ── 8. OSRM Map Matching (Trajectory Buffer → Snap-to-Road) ─
+      let finalSnappedLat = progressResult.snappedLat;
+      let finalSnappedLng = progressResult.snappedLng;
+
+      if (this.enableMapMatching) {
+        // Push raw GPS point to trajectory buffer
+        await this.redisService.pushTrajectoryPoint(
+          participantId,
+          lng,
+          lat,
+          capturedAtMs,
+        );
+
+        // Attempt OSRM Map Match with trajectory
+        const trajectory =
+          await this.redisService.getTrajectoryBuffer(participantId);
+
+        if (trajectory.length >= 2) {
+          const matched =
+            await this.osrmService.matchTrajectory(trajectory);
+          if (matched) {
+            finalSnappedLat = matched.lat;
+            finalSnappedLng = matched.lng;
+            this.logger.debug(
+              `[MapMatch] ✅ OSRM snap for participant ${participantId}: [${matched.lng}, ${matched.lat}]`,
+            );
+          }
+        }
+      }
+
+      // ── 9. Attach Intelligence Result ──────────────────────────
       event.intelligence = {
         progressPercentage: progressResult.progressPercentage,
         distanceToFinish: progressResult.distanceToFinish,
-        snappedLat: progressResult.snappedLat,
-        snappedLng: progressResult.snappedLng,
+        snappedLat: finalSnappedLat,
+        snappedLng: finalSnappedLng,
         rank: rankResult.rank,
         totalParticipants: rankResult.totalParticipants,
         offRoute: offRouteResult.offRoute,
@@ -371,8 +407,8 @@ export class TrackingEnrichmentConsumer
 
     // ── 9. Update Redis cache with new state ─────────────────────
     await this.redisService.updateParticipantState(eventId, participantId, {
-      lat,
-      lng,
+      lat: event.intelligence?.snappedLat ?? lat,
+      lng: event.intelligence?.snappedLng ?? lng,
       speed: speedCalculated,
       isOffline: event.flags.isOffline,
       capturedAt: capturedAtMs,

@@ -345,7 +345,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       anchorLng: anchorLng.toString(),
       startTimeMs: startTimeMs.toString(),
     });
-    await this.redisClient.expire(key, 300); // 5 min TTL
+    await this.redisClient.expire(key, 43200); // 12 hours TTL (prevents anchor loss during long rests)
   }
 
   async clearStopState(eventId: number, participantId: number): Promise<void> {
@@ -430,14 +430,42 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   /** 5-event cooldown for Off-Route alerts to prevent spam. */
   async setOffRouteCooldown(participantId: number): Promise<void> {
     const key = `offroute_cooldown:${participantId}`;
-    // Enforce by assuming 1 event ~ 1 second for standard tracking,
-    // so 10 seconds is safe for 5 events + buffer.
-    await this.redisClient.set(key, 'cooldown', 'EX', 10);
+    // Enforce 60 seconds cooldown to prevent dashboard alert spam
+    await this.redisClient.set(key, 'cooldown', 'EX', 60);
   }
 
   async getOffRouteCooldown(participantId: number): Promise<boolean> {
     const key = `offroute_cooldown:${participantId}`;
     const exists = await this.redisClient.exists(key);
     return exists === 1;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  TRAJECTORY BUFFER (for OSRM Map Matching)
+  // ═══════════════════════════════════════════════════════════════
+
+  /** Append a GPS point to the participant's trajectory buffer (max 5 points, FIFO). */
+  async pushTrajectoryPoint(
+    participantId: number,
+    lng: number,
+    lat: number,
+    timestamp: number,
+  ): Promise<void> {
+    const key = `trajectory:${participantId}`;
+    const point = JSON.stringify({ lng, lat, timestamp });
+    const pipeline = this.redisClient.pipeline();
+    pipeline.rpush(key, point);
+    pipeline.ltrim(key, -5, -1); // Keep only last 5 points
+    pipeline.expire(key, 120); // 2 minutes TTL
+    await pipeline.exec();
+  }
+
+  /** Get the full trajectory buffer as [{ lng, lat, timestamp }]. */
+  async getTrajectoryBuffer(
+    participantId: number,
+  ): Promise<{ lng: number; lat: number; timestamp: number }[]> {
+    const key = `trajectory:${participantId}`;
+    const raw = await this.redisClient.lrange(key, 0, -1);
+    return raw.map((str) => JSON.parse(str));
   }
 }

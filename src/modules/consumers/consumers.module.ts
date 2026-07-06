@@ -17,8 +17,10 @@ import { OffRouteEngine } from './intelligence/offroute.engine';
 import { StopDetectorEngine } from './intelligence/stopdetector.engine';
 
 
+import { EventsModule } from '../events/events.module';
+
 @Module({
-  imports: [StreamModule, DatabaseModule, WebSocketModule, RedisModule],
+  imports: [StreamModule, DatabaseModule, WebSocketModule, RedisModule, EventsModule],
   controllers: [],
   providers: [
     TrackingEnrichmentConsumer,

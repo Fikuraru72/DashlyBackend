@@ -15,7 +15,7 @@ import { ProcessedRoute } from '../../common/interfaces/tracking-event.interface
 @Injectable()
 export class OffRouteEngine {
   private readonly logger = new Logger(OffRouteEngine.name);
-  private readonly DEFAULT_THRESHOLD = 5; // metres (user requirement: 5m)
+  private readonly DEFAULT_THRESHOLD = 20; // metres (increased for cycling)
   private readonly SHARP_TURN_THRESHOLD = 10; // metres (near corners)
   private readonly SHARP_TURN_ANGLE_DEG = 45; // degrees
   private readonly CONSECUTIVE_COUNT_TRIGGER = 3;
@@ -53,18 +53,9 @@ export class OffRouteEngine {
       };
     }
 
-    // ── Cooldown check: suppress alerts for 5 events after trigger ─
+    // ── Cooldown check ───────────────────────────────────────────
     const isCoolingDown =
       await this.redisService.getOffRouteCooldown(participantId);
-    if (isCoolingDown) {
-      // Still track the count but don't emit alerts
-      return {
-        offRoute: snapDistanceMeters > this.DEFAULT_THRESHOLD,
-        offRouteDistance: Math.round(snapDistanceMeters),
-        consecutiveCount: 0, // Suppressed
-        alertEmitted: false,
-      };
-    }
 
     // ── Dynamic threshold: check for sharp turns ─────────────────
     let threshold = this.DEFAULT_THRESHOLD;
@@ -102,13 +93,16 @@ export class OffRouteEngine {
       const offRoute = newCount >= this.CONSECUTIVE_COUNT_TRIGGER;
       let alertEmitted = false;
 
-      if (offRoute) {
+      // Only emit alert and set new cooldown if NOT currently in cooldown
+      if (offRoute && !isCoolingDown) {
         this.logger.warn(
           `[OffRoute] 🚨 Participant ${participantId} OFF ROUTE (${Math.round(snapDistanceMeters)}m, threshold=${threshold}m, ${newCount} consecutive)`,
         );
         alertEmitted = true;
         // Set cooldown to prevent spam
         await this.redisService.setOffRouteCooldown(participantId);
+      } else if (offRoute && isCoolingDown) {
+        this.logger.debug(`[OffRoute] 🔇 Participant ${participantId} off route but cooling down (suppressed)`);
       }
 
       this.logger.debug(

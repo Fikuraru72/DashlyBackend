@@ -24,6 +24,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
   ],
   providers: [EventsService, GpxParserService, OsrmService],
   controllers: [EventsController, PublicEventsController],
-  exports: [EventsService, GpxParserService],
+  exports: [EventsService, GpxParserService, OsrmService],
 })
 export class EventsModule {}
