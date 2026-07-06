@@ -14,11 +14,15 @@ export class UsersService {
   ) {}
 
   async updateProfile(userId: number, dto: UpdateUserDto) {
+    const updateData: any = { ...dto };
+
+    if (dto.password) {
+      updateData.password = await bcrypt.hash(dto.password, 10);
+    }
+
     const [updatedUser] = await this.db
       .update(schema.users)
-      .set({
-        ...dto,
-      })
+      .set(updateData)
       .where(eq(schema.users.id, userId))
       .returning();
 

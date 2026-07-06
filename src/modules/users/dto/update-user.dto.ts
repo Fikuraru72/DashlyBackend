@@ -12,4 +12,16 @@ export class UpdateUserDto {
   @IsOptional()
   @IsNumber()
   roleId?: number;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  avatar?: string;
 }
