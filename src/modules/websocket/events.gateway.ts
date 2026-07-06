@@ -98,6 +98,9 @@ export class EventsGateway
   @Interval(2000)
   private flushPositionBuffer() {
     for (const [eventId, userMap] of this.positionBuffer.entries()) {
+      if (userMap.size > 0) {
+        this.logger.debug(`[WS] Flush triggered for event ${eventId}, buffered positions: ${userMap.size}`);
+      }
       if (userMap.size === 0) continue;
 
       const room = `event_${eventId}`;
