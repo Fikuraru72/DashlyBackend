@@ -10,7 +10,7 @@ import {
 import { DB_CONNECTION } from '../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../db/schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, asc } from 'drizzle-orm';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { UpdateEventStatusDto } from './dto/update-event-status.dto';
@@ -76,6 +76,36 @@ export class EventsService {
         bibNumber: info?.bibNumber || '-',
       };
     });
+  }
+
+  /**
+   * Fetch full path history for all participants in an event.
+   * Returns a map of userId -> array of [lng, lat] coordinates.
+   */
+  async getEventPathHistory(eventId: number) {
+    const logs = await this.db
+      .select({
+        userId: schema.locationLogs.userId,
+        lat: schema.locationLogs.latitude,
+        lng: schema.locationLogs.longitude,
+      })
+      .from(schema.locationLogs)
+      .where(eq(schema.locationLogs.eventId, eventId))
+      .orderBy(asc(schema.locationLogs.capturedAt));
+
+    const historyMap = new Map<number, number[][]>();
+    for (const log of logs) {
+      if (!historyMap.has(log.userId)) {
+        historyMap.set(log.userId, []);
+      }
+      historyMap.get(log.userId)!.push([log.lng, log.lat]); // GeoJSON format: [lng, lat]
+    }
+
+    const result: Record<number, number[][]> = {};
+    for (const [userId, path] of historyMap.entries()) {
+      result[userId] = path;
+    }
+    return result;
   }
 
   async createEvent(user: any, dto: CreateEventDto) {

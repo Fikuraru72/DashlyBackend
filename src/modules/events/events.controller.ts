@@ -157,6 +157,12 @@ export class EventsController {
 
 
 
+  @Get(':id/path-history')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async getEventPathHistory(@Param('id') id: string) {
+    return this.eventsService.getEventPathHistory(+id);
+  }
+
   @Get(':id/positions')
   @Roles('SUPER_ADMIN', 'STAFF')
   async getEventPositions(@Param('id') id: string) {

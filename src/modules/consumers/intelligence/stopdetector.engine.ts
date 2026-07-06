@@ -15,8 +15,8 @@ import { RedisService } from '../../redis/redis.service';
 export class StopDetectorEngine {
   private readonly logger = new Logger(StopDetectorEngine.name);
   private readonly SPEED_THRESHOLD = 1.0; // m/s (higher threshold for initial anchor setting)
-  private readonly ANCHOR_RADIUS = 15; // metres (allow 15m of GPS drift without resetting timer)
-  private readonly STOP_DURATION_MS = 60_000; // 60 seconds
+  private readonly ANCHOR_RADIUS = 5; // metres (allow 5m of GPS drift without resetting timer)
+  private readonly STOP_DURATION_MS = 300_000; // 300 seconds (5 minutes)
 
   constructor(private readonly redisService: RedisService) {}
 
