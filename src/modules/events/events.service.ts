@@ -950,4 +950,35 @@ export class EventsService {
       message: `Participant state updated to ${newState}`,
     };
   }
+
+  async getMyLiveStats(eventId: number, user: any) {
+    const userId = user.id || user.sub;
+
+    const participant = await this.db.query.eventParticipants.findFirst({
+      where: and(
+        eq(schema.eventParticipants.eventId, eventId),
+        eq(schema.eventParticipants.userId, userId),
+      ),
+    });
+
+    if (!participant) {
+      throw new NotFoundException('Not joined');
+    }
+
+    const allRankings = await this.redisService.getAllRankings(eventId);
+    let rank: number | null = allRankings.findIndex((r) => r.participantId === participant.id) + 1;
+    if (rank === 0) rank = null;
+
+    const progress = await this.redisService.getProgressState(eventId, participant.id);
+
+    return {
+      success: true,
+      data: {
+        rank,
+        progressPercentage: progress?.progressPercentage ?? 0,
+        distanceCovered: progress?.distanceCovered ?? 0,
+        checkpointsCompleted: progress?.checkpointsCompleted ?? 0,
+      }
+    };
+  }
 }

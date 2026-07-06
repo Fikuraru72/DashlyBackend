@@ -148,6 +148,12 @@ export class EventsController {
     return this.eventsService.verifyBib(user, +id, dto.bibNumber);
   }
 
+  @Get(':id/participants/me/live-stats')
+  @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
+  async getMyLiveStats(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.eventsService.getMyLiveStats(+id, user);
+  }
+
   @Post('join-via-token')
   @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
   async joinEventViaToken(@Body() dto: JoinEventDto, @CurrentUser() user: any) {
