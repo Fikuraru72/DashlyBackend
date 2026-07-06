@@ -87,6 +87,7 @@ export class StopDetectorEngine {
 
     if (distFromAnchor > this.ANCHOR_RADIUS) {
       // ── Moving: Participant left the anchor radius ──
+      this.logger.debug(`[StopDetector] Anchor broken for ${participantId} by ${Math.round(distFromAnchor)}m drift. Resetting timer.`);
       await this.redisService.clearStopState(eventId, participantId);
       await this.redisService.clearStopAlertSent(eventId, participantId);
       return { stopped: false, stoppedDurationSec: 0, justStopped: false };
