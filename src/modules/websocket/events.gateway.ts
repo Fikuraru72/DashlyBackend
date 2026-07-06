@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 
 @WebSocketGateway({
   cors: {
@@ -94,6 +95,7 @@ export class EventsGateway
   }
 
   // Flush accumulated updates to dashboards every 2 seconds
+  @Interval(2000)
   private flushPositionBuffer() {
     for (const [eventId, userMap] of this.positionBuffer.entries()) {
       if (userMap.size === 0) continue;
