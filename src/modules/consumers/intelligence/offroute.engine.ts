@@ -18,7 +18,7 @@ export class OffRouteEngine {
   private readonly DEFAULT_THRESHOLD = 20; // metres (increased for cycling)
   private readonly SHARP_TURN_THRESHOLD = 10; // metres (near corners)
   private readonly SHARP_TURN_ANGLE_DEG = 45; // degrees
-  private readonly CONSECUTIVE_COUNT_TRIGGER = 3;
+  private readonly CONSECUTIVE_COUNT_TRIGGER = 1; // DIUBAH JADI 1 UNTUK TESTING (sebelumnya 3)
   private readonly MIN_SPEED_FOR_OFFROUTE = 0.3; // m/s — below this, GPS drift is expected
 
   constructor(private readonly redisService: RedisService) {}
@@ -55,8 +55,7 @@ export class OffRouteEngine {
     }
 
     // ── Cooldown check ───────────────────────────────────────────
-    const isCoolingDown =
-      await this.redisService.getOffRouteCooldown(participantId);
+    const isCoolingDown = false; // MATIKAN SEMENTARA UNTUK TESTING (aslinya: await this.redisService.getOffRouteCooldown(participantId); )
 
     // ── Dynamic threshold: check for sharp turns ─────────────────
     let threshold = this.DEFAULT_THRESHOLD;

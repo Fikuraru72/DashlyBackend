@@ -550,6 +550,10 @@ export class TrackingEnrichmentConsumer
         (f: any) => f.geometry && f.geometry.type === 'LineString',
       );
       if (feature) coordinates = feature.geometry.coordinates;
+    } else if (parsedGeojson.type === 'Feature' && parsedGeojson.geometry) {
+      if (parsedGeojson.geometry.type === 'LineString') {
+        coordinates = parsedGeojson.geometry.coordinates;
+      }
     } else if (parsedGeojson.type === 'LineString') {
       coordinates = parsedGeojson.coordinates;
     } else if (parsedGeojson.coordinates) {
