@@ -44,7 +44,8 @@ export class OffRouteEngine {
     );
 
     // ── Speed gate: moving too slow = GPS drift, not off-route ───
-    if (speedCalculated < this.MIN_SPEED_FOR_OFFROUTE) {
+    // Exception: If they are more than 100m away, it's definitely not just GPS drift.
+    if (speedCalculated < this.MIN_SPEED_FOR_OFFROUTE && snapDistanceMeters < 100) {
       return {
         offRoute: false,
         offRouteDistance: Math.round(snapDistanceMeters),
