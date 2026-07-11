@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -193,5 +194,24 @@ export class EventsController {
       +participantId,
       body.state,
     );
+  }
+
+  @Delete(':eventId/anomalies/:anomalyId')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async deleteAnomaly(
+    @Param('eventId') eventId: string,
+    @Param('anomalyId') anomalyId: string,
+  ) {
+    return this.eventsService.deleteAnomaly(+eventId, +anomalyId);
+  }
+
+  @Delete(':eventId/participants/:participantId/anomalies')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async deleteAnomalyByType(
+    @Param('eventId') eventId: string,
+    @Param('participantId') participantId: string,
+    @Query('type') type: string,
+  ) {
+    return this.eventsService.deleteAnomalyByType(+eventId, +participantId, type);
   }
 }

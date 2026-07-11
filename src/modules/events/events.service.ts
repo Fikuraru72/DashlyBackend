@@ -992,6 +992,16 @@ export class EventsService {
       .where(eq(schema.eventParticipants.id, participant.id))
       .returning();
 
+    if (newState === 'TRACKING') {
+      await this.db.delete(schema.anomalies)
+        .where(
+          and(
+            eq(schema.anomalies.eventId, eventId),
+            eq(schema.anomalies.userId, userId)
+          )
+        );
+    }
+
     this.logger.log(
       `[Events] Participant (User ${userId}) state changed: ${participant.participantState} → ${newState}`,
     );
@@ -1001,6 +1011,37 @@ export class EventsService {
       data: updated,
       message: `Participant state updated to ${newState}`,
     };
+  }
+
+  async deleteAnomaly(eventId: number, anomalyId: number) {
+    const [deleted] = await this.db.delete(schema.anomalies)
+      .where(
+        and(
+          eq(schema.anomalies.id, anomalyId),
+          eq(schema.anomalies.eventId, eventId)
+        )
+      )
+      .returning();
+      
+    if (!deleted) {
+      throw new NotFoundException('Anomaly not found');
+    }
+    
+    return { success: true, data: deleted };
+  }
+
+  async deleteAnomalyByType(eventId: number, userId: number, type: string) {
+    const [deleted] = await this.db.delete(schema.anomalies)
+      .where(
+        and(
+          eq(schema.anomalies.userId, userId),
+          eq(schema.anomalies.eventId, eventId),
+          eq(schema.anomalies.type, type)
+        )
+      )
+      .returning();
+      
+    return { success: true, data: deleted };
   }
 
   async getMyLiveStats(eventId: number, user: any) {
