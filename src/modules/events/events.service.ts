@@ -536,7 +536,37 @@ export class EventsService {
     return { success: true, data: deleted };
   }
 
-  async getParticipants(eventId: number) {
+  async getEventAnomalies(eventId: number) {
+    const recentAnomalies = await this.db.query.anomalies.findMany({
+      where: eq(schema.anomalies.eventId, eventId),
+      orderBy: (anomalies, { desc }) => [desc(anomalies.timestamp)],
+      limit: 50,
+      with: {
+        user: {
+          columns: {
+            id: true,
+            name: true,
+            avatar: true,
+            phone: true,
+          }
+        }
+      }
+    });
+
+    return recentAnomalies.map(a => ({
+      id: String(a.id),
+      eventId: a.eventId,
+      userId: a.userId,
+      type: a.type,
+      latitude: a.latitude,
+      longitude: a.longitude,
+      message: a.reason,
+      timestamp: a.timestamp.toISOString(),
+      name: a.user?.name,
+    }));
+  }
+
+  async getEventParticipants(eventId: number) {
     const results = await this.db
       .select({
         id: schema.users.id,

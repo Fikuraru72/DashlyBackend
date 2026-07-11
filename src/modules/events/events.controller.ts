@@ -100,6 +100,12 @@ export class EventsController {
     return this.eventsService.getParticipants(+id);
   }
 
+  @Get(':id/anomalies')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async getAnomalies(@Param('id') id: string) {
+    return this.eventsService.getEventAnomalies(+id);
+  }
+
   @Get(':id')
   @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
   async getEventById(@Param('id') id: string, @CurrentUser() user: any) {

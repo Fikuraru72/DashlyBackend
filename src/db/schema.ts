@@ -201,6 +201,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   locationLogs: many(locationLogs),
   tokens: many(tokens),
   rankings: many(rankings),
+  anomalies: many(anomalies),
 }));
 
 export const rolesRelations = relations(roles, ({ many }) => ({
@@ -211,6 +212,7 @@ export const eventsRelations = relations(events, ({ many }) => ({
   locationLogs: many(locationLogs),
   tokens: many(tokens),
   rankings: many(rankings),
+  anomalies: many(anomalies),
 }));
 
 export const tokensRelations = relations(tokens, ({ one }) => ({
@@ -220,6 +222,17 @@ export const tokensRelations = relations(tokens, ({ one }) => ({
   }),
   user: one(users, {
     fields: [tokens.userId],
+    references: [users.id],
+  }),
+}));
+
+export const anomaliesRelations = relations(anomalies, ({ one }) => ({
+  event: one(events, {
+    fields: [anomalies.eventId],
+    references: [events.id],
+  }),
+  user: one(users, {
+    fields: [anomalies.userId],
     references: [users.id],
   }),
 }));
