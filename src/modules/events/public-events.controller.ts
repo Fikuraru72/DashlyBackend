@@ -33,6 +33,33 @@ export class PublicEventsController {
     return this.eventsService.publicRegisterEvent(dto, eventId);
   }
 
+  @Get(':id/live')
+  async getLivePositions(@Param('id') id: string) {
+    const eventId = +id;
+    if (isNaN(eventId)) {
+      throw new BadRequestException('Invalid event ID');
+    }
+    return this.eventsService.getLivePositions(eventId);
+  }
+
+  @Get(':id/path-history')
+  async getEventPathHistory(@Param('id') id: string) {
+    const eventId = +id;
+    if (isNaN(eventId)) {
+      throw new BadRequestException('Invalid event ID');
+    }
+    return this.eventsService.getEventPathHistory(eventId);
+  }
+
+  @Get(':id/participants')
+  async getPublicParticipants(@Param('id') id: string) {
+    const eventId = +id;
+    if (isNaN(eventId)) {
+      throw new BadRequestException('Invalid event ID');
+    }
+    return this.eventsService.getPublicParticipants(eventId);
+  }
+
   @Get(':id/ticket')
   @UseGuards(JwtAuthGuard)
   async getEventTicket(@Param('id') id: string, @CurrentUser() user: any) {

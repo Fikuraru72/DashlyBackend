@@ -557,6 +557,25 @@ export class EventsService {
     return { success: true, data: results };
   }
 
+  async getPublicParticipants(eventId: number) {
+    const results = await this.db
+      .select({
+        id: schema.users.id,
+        name: schema.users.name,
+        joinedAt: schema.eventParticipants.joinedAt,
+        bibNumber: schema.eventParticipants.bibNumber,
+        state: schema.eventParticipants.participantState,
+      })
+      .from(schema.eventParticipants)
+      .innerJoin(
+        schema.users,
+        eq(schema.eventParticipants.userId, schema.users.id),
+      )
+      .where(eq(schema.eventParticipants.eventId, eventId));
+
+    return { success: true, data: results };
+  }
+
   async joinEvent(user: any, eventId: number) {
     return this.db.transaction(async (tx) => {
       // 1. Find the event
@@ -649,7 +668,10 @@ export class EventsService {
       }
 
       if (participant.participantState === 'CONFIRMED' || participant.participantState === 'TRACKING') {
-        throw new ConflictException('Your BIB is already verified.');
+        return {
+          success: true,
+          message: 'BIB verified successfully. You are now ready to track.',
+        };
       }
 
       // Check if BIB matches
