@@ -292,22 +292,8 @@ export class EventsService {
 
     let events: any[];
 
-    if (user.role === 'SUPER_ADMIN') {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'STAFF') {
       events = await this.db.query.events.findMany({ where: baseWhere });
-    } else if (user.role === 'STAFF') {
-      const staffLinks = await this.db.query.eventStaff.findMany({
-        where: eq(schema.eventStaff.userId, user.id),
-      });
-      const eventIds = staffLinks
-        .map((link) => link.eventId)
-        .filter((id): id is number => id !== null);
-
-      if (eventIds.length === 0) return { success: true, data: [] };
-
-      events = await this.db.query.events.findMany({
-        where: (events, { inArray, and }) =>
-          and(inArray(events.id, eventIds), baseWhere),
-      });
     } else {
       events = [];
     }
@@ -384,17 +370,6 @@ export class EventsService {
 
     if (!event) {
       throw new NotFoundException('Event not found');
-    }
-
-    if (user.role === 'STAFF') {
-      const isStaff = await this.db.query.eventStaff.findFirst({
-        where: and(
-          eq(schema.eventStaff.eventId, eventId),
-          eq(schema.eventStaff.userId, user.id),
-        ),
-      });
-
-      if (!isStaff) throw new ForbiddenException('Not assigned to this event');
     }
 
     const monitoringWindow = getMonitoringWindow(event);
