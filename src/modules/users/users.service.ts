@@ -49,19 +49,17 @@ export class UsersService {
   }
 
   async getUserStats(userId: number) {
-    const finishedEvents = await this.db
+    const allEvents = await this.db
       .select({
         distanceCovered: schema.eventParticipants.distanceCovered,
+        participantState: schema.eventParticipants.participantState,
       })
       .from(schema.eventParticipants)
-      .where(
-        and(
-          eq(schema.eventParticipants.userId, userId),
-          eq(schema.eventParticipants.participantState, 'FINISHED'),
-        ),
-      );
+      .where(eq(schema.eventParticipants.userId, userId));
 
-    const totalEvents = finishedEvents.length;
+    const totalEvents = allEvents.length;
+    const finishedEvents = allEvents.filter((e) => e.participantState === 'FINISHED');
+    
     const totalDistanceMeters = finishedEvents.reduce(
       (acc, curr) => acc + (curr.distanceCovered || 0),
       0,
@@ -71,7 +69,7 @@ export class UsersService {
     return {
       totalDistance: parseFloat(totalDistance.toFixed(2)),
       totalEvents,
-      avgSpeed: totalEvents > 0 ? 12.5 : 0, // MVP placeholder
+      avgSpeed: finishedEvents.length > 0 ? 12.5 : 0, // MVP placeholder
       points: Math.floor(totalDistanceMeters / 100),
     };
   }

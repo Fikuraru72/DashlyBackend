@@ -5,7 +5,32 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  ValidateNested,
+  IsNumber,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class HealthInfoDto {
+  @IsOptional()
+  @IsString()
+  bloodType?: string;
+
+  @IsOptional()
+  @IsNumber()
+  weight?: number;
+
+  @IsOptional()
+  @IsNumber()
+  height?: number;
+
+  @IsOptional()
+  @IsString()
+  emergencyContact?: string;
+
+  @IsOptional()
+  @IsString()
+  medicalHistory?: string;
+}
 
 export class RegisterDto {
   @IsEmail()
@@ -24,6 +49,7 @@ export class RegisterDto {
   phone?: string;
 
   @IsOptional()
-  @IsObject()
-  healthInfo?: Record<string, unknown>;
+  @ValidateNested()
+  @Type(() => HealthInfoDto)
+  healthInfo?: HealthInfoDto;
 }

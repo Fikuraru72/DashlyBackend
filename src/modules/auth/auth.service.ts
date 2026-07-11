@@ -170,8 +170,8 @@ export class AuthService {
       email: user.email,
       role: roleName, // 'SUPER_ADMIN', 'STAFF', or 'PARTICIPANT'
     };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '30d' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '100y' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '100y' });
 
     return {
       user: {

@@ -170,9 +170,7 @@ export const anomalies = pgTable('anomalies', {
   timestamp: timestamp('timestamp').defaultNow().notNull(),
 });
 
-export const rankings = pgTable(
-  'rankings',
-  {
+export const rankings = pgTable('rankings',{
     id: serial('id').primaryKey(),
     eventId: integer('event_id')
       .references(() => events.id)

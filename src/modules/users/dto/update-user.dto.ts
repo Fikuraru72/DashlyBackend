@@ -1,4 +1,6 @@
-import { IsObject, IsOptional, IsString, IsNumber } from 'class-validator';
+import { IsObject, IsOptional, IsString, IsNumber, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { HealthInfoDto } from '../auth/dto/register.dto';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -6,8 +8,9 @@ export class UpdateUserDto {
   phone?: string;
 
   @IsOptional()
-  @IsObject()
-  healthInfo?: Record<string, unknown>;
+  @ValidateNested()
+  @Type(() => HealthInfoDto)
+  healthInfo?: HealthInfoDto;
 
   @IsOptional()
   @IsNumber()
