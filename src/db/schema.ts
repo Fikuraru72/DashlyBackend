@@ -237,11 +237,3 @@ export const anomaliesRelations = relations(anomalies, ({ one }) => ({
   }),
 }));
 
-export const appReleases = pgTable('app_releases', {
-  id: serial('id').primaryKey(),
-  version: varchar('version', { length: 50 }).notNull(),
-  buildNumber: integer('build_number').notNull(),
-  fileUrl: varchar('file_url', { length: 255 }).notNull(),
-  releaseNotes: text('release_notes'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});

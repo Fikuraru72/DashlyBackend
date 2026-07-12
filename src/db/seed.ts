@@ -311,18 +311,6 @@ async function seed() {
       console.log('Location logs already exist, skipping...');
     }
 
-    // --- 6. APP RELEASES ---
-    console.log('--- Seeding App Releases ---');
-    const existingRelease = await db.select().from(schema.appReleases).limit(1);
-    if (existingRelease.length === 0) {
-      await db.insert(schema.appReleases).values({
-        version: '1.0.0',
-        buildNumber: 1,
-        fileUrl: 'https://github.com/Fikuraru72/DashlyBackend/releases/download/v1/dashly.apk',
-        releaseNotes: 'Initial release',
-      });
-      console.log('Created initial app release');
-    }
 
     console.log('Seeding completed successfully! 🚀');
   } catch (error) {
