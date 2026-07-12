@@ -31,7 +31,10 @@ export class OsrmService {
       ),
     };
 
-    if (this.configService.get('OSRM_ENABLED', 'true') === 'false') {
+    if (
+      this.configService.get('OSRM_ENABLED', 'true') === 'false' ||
+      rawRoute.properties?.source === 'gpx'
+    ) {
       return fallback;
     }
 

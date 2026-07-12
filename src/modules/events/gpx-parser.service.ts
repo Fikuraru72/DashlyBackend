@@ -26,30 +26,50 @@ export class GpxParserService {
 
       const geoJson = gpx(doc);
 
-      // Find the first LineString or MultiLineString
-      let routeFeature = geoJson.features.find(
-        (f) =>
-          f.geometry.type === 'LineString' ||
-          f.geometry.type === 'MultiLineString',
-      ) as Feature<LineString>;
+      // Collect all line segments from the GPX
+      const allSegments: number[][][] = [];
+      
+      for (const f of geoJson.features) {
+        if (f.geometry.type === 'LineString') {
+           allSegments.push(f.geometry.coordinates as number[][]);
+        } else if (f.geometry.type === 'MultiLineString') {
+           allSegments.push(...(f.geometry.coordinates as number[][][]));
+        }
+      }
 
-      if (!routeFeature) {
+      if (allSegments.length === 0) {
         throw new BadRequestException(
           'No route (LineString) found in GPX file',
         );
       }
 
-      // If it's a MultiLineString, we flatten it to a single LineString for simplicity
-      if ((routeFeature.geometry.type as any) === 'MultiLineString') {
-        const coords = (routeFeature.geometry as any).coordinates.flat(1);
-        routeFeature = {
-          ...routeFeature,
-          geometry: {
-            type: 'LineString',
-            coordinates: coords,
-          },
-        };
+      // Find the longest segment to discard branches/pit-lanes
+      let longestSegment = allSegments[0];
+      let maxLen = -1;
+      
+      for (const segment of allSegments) {
+        let len = 0;
+        for (let i = 1; i < segment.length; i++) {
+          const prev = segment[i - 1];
+          const curr = segment[i];
+          len += this.calculateHaversineDistance(
+            prev[1], prev[0], curr[1], curr[0]
+          );
+        }
+        if (len > maxLen) {
+          maxLen = len;
+          longestSegment = segment;
+        }
       }
+
+      const routeFeature: Feature<LineString> = {
+        type: 'Feature',
+        properties: { source: 'gpx' },
+        geometry: {
+          type: 'LineString',
+          coordinates: longestSegment,
+        },
+      };
 
       const coordinates = routeFeature.geometry.coordinates;
       if (!coordinates || coordinates.length < 2) {
