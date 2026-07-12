@@ -32,6 +32,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-socket.io": "^11.1.16",
     "@nestjs/schedule": "^6.1.1",
+    "@nestjs/serve-static": "^5.0.5",
     "@nestjs/websockets": "^11.1.16",
     "@tmcw/togeojson": "^7.1.2",
     "@turf/turf": "^7.3.4",
