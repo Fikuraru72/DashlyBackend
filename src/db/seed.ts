@@ -318,7 +318,7 @@ async function seed() {
       await db.insert(schema.appReleases).values({
         version: '1.0.0',
         buildNumber: 1,
-        fileUrl: 'https://github.com/Fikuraru72/DashlyBackend/releases/download/v1.0.0/dashly.apk',
+        fileUrl: 'https://github.com/Fikuraru72/DashlyBackend/releases/download/v1/dashly.apk',
         releaseNotes: 'Initial release',
       });
       console.log('Created initial app release');
