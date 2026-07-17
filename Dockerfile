@@ -3,7 +3,7 @@
 FROM ghcr.io/voidzero-dev/vite-plus:0.2.4 AS build
 
 WORKDIR /app
-COPY --chown=vp:vp package.json pnpm-lock.yaml ./
+COPY --chown=vp:vp package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN vp install --frozen-lockfile
 COPY --chown=vp:vp . .
 RUN vp run build
