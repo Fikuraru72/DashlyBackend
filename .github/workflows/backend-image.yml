@@ -61,12 +61,17 @@ jobs:
           provenance: mode=max
           sbom: true
       - name: Deploy Dokploy Compose
-        if: github.ref == 'refs/heads/master' && vars.DOKPLOY_URL != '' && vars.DOKPLOY_COMPOSE_ID != ''
+        if: github.ref == 'refs/heads/master'
         env:
           DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
           DOKPLOY_COMPOSE_ID: ${{ vars.DOKPLOY_COMPOSE_ID }}
           DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
         run: |
+          if [ -z "$DOKPLOY_URL" ] || [ -z "$DOKPLOY_COMPOSE_ID" ] || [ -z "$DOKPLOY_API_KEY" ]; then
+            echo "Dokploy is not configured; skipping deployment."
+            exit 0
+          fi
+
           curl --fail-with-body --request POST \
             "$DOKPLOY_URL/api/compose.redeploy" \
             --header "x-api-key: $DOKPLOY_API_KEY" \
