@@ -147,6 +147,10 @@ export class TrackingEnrichmentConsumer
     let lastTime = 0;
     let lastLat: number | null = null;
     let lastLng: number | null = null;
+    let lastAltitude: number | null = null;
+    let elevationGain = parseFloat(prevStats.elevation_gain || '0');
+    let minAltitude = parseFloat(prevStats.min_altitude || '9999');
+    let maxAltitude = parseFloat(prevStats.max_altitude || '-9999');
     let currentState = 'REGISTERED';
 
     // Single-flight DB fallback on Redis miss
@@ -158,6 +162,9 @@ export class TrackingEnrichmentConsumer
       lastTime = parseInt(prevStats.captured_at, 10);
       lastLat = parseFloat(prevStats.lat);
       lastLng = parseFloat(prevStats.lng);
+      if (prevStats.altitude) {
+        lastAltitude = parseFloat(prevStats.altitude);
+      }
     }
     if (prevStats.participantState) {
       currentState = prevStats.participantState;
@@ -212,6 +219,19 @@ export class TrackingEnrichmentConsumer
         event.flags.isAnomaly = true;
         event.gatekeeperAction = 'ANOMALY';
         this.anomalyCount++;
+      }
+    }
+
+    if (event.altitude != null) {
+      const currentAlt = event.altitude;
+      if (currentAlt < minAltitude) minAltitude = currentAlt;
+      if (currentAlt > maxAltitude) maxAltitude = currentAlt;
+      
+      if (lastAltitude != null) {
+        const diff = currentAlt - lastAltitude;
+        if (diff > 1.0) { // 1 meter threshold for noise filtering
+          elevationGain += diff;
+        }
       }
     }
 
@@ -394,6 +414,9 @@ export class TrackingEnrichmentConsumer
         stoppedDurationSec: stopResult.stoppedDurationSec,
         score: rankResult.score,
         participantState: finalState,
+        elevationGain,
+        minAltitude: minAltitude === 9999 ? 0 : minAltitude,
+        maxAltitude: maxAltitude === -9999 ? 0 : maxAltitude,
       };
 
       // Broadcast ranking update
@@ -409,9 +432,13 @@ export class TrackingEnrichmentConsumer
     await this.redisService.updateParticipantState(eventId, participantId, {
       lat: event.intelligence?.snappedLat ?? lat,
       lng: event.intelligence?.snappedLng ?? lng,
+      altitude: event.altitude,
       speed: speedCalculated,
       isOffline: event.flags.isOffline,
       capturedAt: capturedAtMs,
+      elevationGain,
+      minAltitude: minAltitude === 9999 ? 0 : minAltitude,
+      maxAltitude: maxAltitude === -9999 ? 0 : maxAltitude,
     });
 
     const statsKey = `participant_stats:${participantId}`;

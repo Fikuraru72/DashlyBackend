@@ -91,6 +91,7 @@ export class DbWriterConsumer implements OnModuleInit, OnModuleDestroy {
         eventId: e.eventId,
         latitude: e.intelligence?.snappedLat ?? e.lat,
         longitude: e.intelligence?.snappedLng ?? e.lng,
+        altitude: e.altitude,
         speed: e.speedFromClient,
         distanceDelta: e.distanceDelta,
         speedCalculated: e.speedCalculated,
