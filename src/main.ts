@@ -1,3 +1,4 @@
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
@@ -8,6 +9,13 @@ async function bootstrap() {
 
   // Apply Global Exception Filter
   app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   // Increase payload size limit to 50mb for large GeoJSON & Base64 images
   app.useBodyParser('json', { limit: '50mb' });
@@ -25,4 +33,4 @@ async function bootstrap() {
 
   console.log(`Application is running on: http://0.0.0.0:${port}`);
 }
-bootstrap();
+void bootstrap();

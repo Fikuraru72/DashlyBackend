@@ -1,11 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { IdentityCacheService } from './identity-cache.service';
 import { EventCacheService } from './event-cache.service';
 import { TrackingStreamService } from '../stream/tracking-stream.service';
-import {
-  TrackingEvent,
-  RawIngestPayload,
-} from '../common/interfaces/tracking-event.interface';
+import { TrackingEvent, RawIngestPayload } from '../common/interfaces/tracking-event.interface';
 
 /**
  * TrackingValidatorService — LIGHTWEIGHT normaliser.

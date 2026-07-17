@@ -15,6 +15,13 @@
       "when": 1775102209901,
       "tag": "0001_race_management_refactor",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784289600000,
+      "tag": "0002_event_participant_bib_unique",
+      "breakpoints": true
     }
   ]
 }

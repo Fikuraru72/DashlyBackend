@@ -6,7 +6,6 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -19,6 +18,7 @@ import { OsrmService } from './osrm.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { UpdateEventStatusDto } from './dto/update-event-status.dto';
+import { UpdateParticipantStateDto } from './dto/update-participant-state.dto';
 import { JoinEventDto } from './dto/join-event.dto';
 import { VerifyBibDto } from './dto/verify-bib.dto';
 
@@ -39,19 +39,14 @@ export class EventsController {
   @Post('upload-gpx')
   @Roles('SUPER_ADMIN', 'STAFF')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadGpx(@UploadedFile() file: Express.Multer.File) {
+  async uploadGpx(@UploadedFile() file: { buffer: Buffer; originalname?: string }) {
     if (!file) {
       throw new Error('No file provided');
     }
     const gpxString = file.buffer.toString('utf-8');
     const parsed = this.gpxParser.parseGpx(gpxString);
-    const category = file.originalname?.toLowerCase().includes('cycling')
-      ? 'CYCLING'
-      : 'RUNNING';
-    const normalized = await this.osrmService.normalizeRoute(
-      category,
-      parsed.geoJson,
-    );
+    const category = file.originalname?.toLowerCase().includes('cycling') ? 'CYCLING' : 'RUNNING';
+    const normalized = await this.osrmService.normalizeRoute(category, parsed.geoJson);
 
     return {
       success: true,
@@ -98,13 +93,7 @@ export class EventsController {
   @Get(':id/participants')
   @Roles('SUPER_ADMIN', 'STAFF')
   async getParticipants(@Param('id') id: string) {
-    return this.eventsService.getEventParticipants(+id);
-  }
-
-  @Get(':id/anomalies')
-  @Roles('SUPER_ADMIN', 'STAFF')
-  async getAnomalies(@Param('id') id: string) {
-    return this.eventsService.getEventAnomalies(+id);
+    return this.eventsService.getParticipants(+id);
   }
 
   @Get(':id')
@@ -155,25 +144,11 @@ export class EventsController {
     return this.eventsService.verifyBib(user, +id, dto.bibNumber);
   }
 
-  @Get(':id/participants/me/live-stats')
-  @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
-  async getMyLiveStats(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.eventsService.getMyLiveStats(+id, user);
-  }
-
   @Post('join-via-token')
   @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
   async joinEventViaToken(@Body() dto: JoinEventDto, @CurrentUser() user: any) {
     console.log('[DEBUG] join-via-token requested by user:', user);
     return this.eventsService.joinEventViaToken(user, dto.token);
-  }
-
-
-
-  @Get(':id/path-history')
-  @Roles('SUPER_ADMIN', 'STAFF')
-  async getEventPathHistory(@Param('id') id: string) {
-    return this.eventsService.getEventPathHistory(+id);
   }
 
   @Get(':id/positions')
@@ -187,31 +162,8 @@ export class EventsController {
   async updateParticipantState(
     @Param('eventId') eventId: string,
     @Param('participantId') participantId: string,
-    @Body() body: { state: string },
+    @Body() body: UpdateParticipantStateDto,
   ) {
-    return this.eventsService.updateParticipantState(
-      +eventId,
-      +participantId,
-      body.state,
-    );
-  }
-
-  @Delete(':eventId/anomalies/:anomalyId')
-  @Roles('SUPER_ADMIN', 'STAFF')
-  async deleteAnomaly(
-    @Param('eventId') eventId: string,
-    @Param('anomalyId') anomalyId: string,
-  ) {
-    return this.eventsService.deleteAnomaly(+eventId, +anomalyId);
-  }
-
-  @Delete(':eventId/participants/:participantId/anomalies')
-  @Roles('SUPER_ADMIN', 'STAFF')
-  async deleteAnomalyByType(
-    @Param('eventId') eventId: string,
-    @Param('participantId') participantId: string,
-    @Query('type') type: string,
-  ) {
-    return this.eventsService.deleteAnomalyByType(+eventId, +participantId, type);
+    return this.eventsService.updateParticipantState(+eventId, +participantId, body.state);
   }
 }

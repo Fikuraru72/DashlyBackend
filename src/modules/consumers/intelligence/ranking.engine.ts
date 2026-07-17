@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  Inject,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { RedisService } from '../../redis/redis.service';
 import { DB_CONNECTION } from '../../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -46,10 +40,7 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    this.flushTimer = setInterval(
-      () => this.flushAllRankings(),
-      this.FLUSH_INTERVAL_MS,
-    );
+    this.flushTimer = setInterval(() => this.flushAllRankings(), this.FLUSH_INTERVAL_MS);
     this.logger.log('Ranking engine started (flush every 30s, HARDENED)');
   }
 
@@ -75,10 +66,7 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ score: number; rank: number; totalParticipants: number }> {
     // ── Anomaly exclusion: return previous score unchanged ──────
     if (isAnomaly) {
-      const zeroBasedRank = await this.redisService.getRank(
-        eventId,
-        participantId,
-      );
+      const zeroBasedRank = await this.redisService.getRank(eventId, participantId);
       const totalParticipants = await this.redisService.getTotalRanked(eventId);
       // Read previous score from sorted set
       const allRankings = await this.redisService.getAllRankings(eventId);
@@ -95,29 +83,21 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
     const speedBuffer = await this.redisService.getSpeedBuffer(participantId);
     let smoothedSpeed = rawSpeed;
     if (speedBuffer.length > 0) {
-      smoothedSpeed =
-        speedBuffer.reduce((a, b) => a + b, 0) / speedBuffer.length;
+      smoothedSpeed = speedBuffer.reduce((a, b) => a + b, 0) / speedBuffer.length;
     }
 
     // ── 2. Speed clamping ──────────────────────────────────────
-    const maxSpeed =
-      eventCategory === 'CYCLING'
-        ? this.MAX_SPEED_CYCLING
-        : this.MAX_SPEED_RUNNING;
+    const maxSpeed = eventCategory === 'CYCLING' ? this.MAX_SPEED_CYCLING : this.MAX_SPEED_RUNNING;
     const clampedSpeed = Math.min(smoothedSpeed, maxSpeed);
 
     // ── 3. Normalize speed (0–100 scale) ───────────────────────
     const normalizedSpeed = (clampedSpeed / maxSpeed) * 100;
 
     // ── 4. Normalize checkpoint completion (0–100 scale) ───────
-    const checkpointCompletion =
-      (checkpointsCompleted / this.TOTAL_CHECKPOINTS) * 100;
+    const checkpointCompletion = (checkpointsCompleted / this.TOTAL_CHECKPOINTS) * 100;
 
     // ── 5. Hybrid score ────────────────────────────────────────
-    let newScore =
-      progressPercentage * 0.7 +
-      normalizedSpeed * 0.2 +
-      checkpointCompletion * 0.1;
+    let newScore = progressPercentage * 0.7 + normalizedSpeed * 0.2 + checkpointCompletion * 0.1;
 
     // ── 6. Backward movement penalty ───────────────────────────
     if (backwardMovement) {
@@ -129,13 +109,10 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
     // ── 7. Delta stabilization (anti-cheat) ────────────────────
     // Read previous score
     const allRankings = await this.redisService.getAllRankings(eventId);
-    const prevEntry = allRankings.find(
-      (r) => r.participantId === participantId,
-    );
+    const prevEntry = allRankings.find((r) => r.participantId === participantId);
     const prevScore = prevEntry?.score ?? 0;
 
-    const maxDelta =
-      progressPercentage > 90 ? this.MAX_DELTA_FINISH : this.MAX_DELTA_NORMAL;
+    const maxDelta = progressPercentage > 90 ? this.MAX_DELTA_FINISH : this.MAX_DELTA_NORMAL;
 
     if (newScore > prevScore + maxDelta) {
       newScore = Math.round((prevScore + maxDelta) * 100) / 100;
@@ -143,17 +120,10 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
     // Allow decrease without limit (backward movement, corrections)
 
     // ── 8. Update Redis sorted set ─────────────────────────────
-    await this.redisService.updateRankingScore(
-      eventId,
-      participantId,
-      newScore,
-    );
+    await this.redisService.updateRankingScore(eventId, participantId, newScore);
 
     // ── 9. Read rank ───────────────────────────────────────────
-    const zeroBasedRank = await this.redisService.getRank(
-      eventId,
-      participantId,
-    );
+    const zeroBasedRank = await this.redisService.getRank(eventId, participantId);
     const totalParticipants = await this.redisService.getTotalRanked(eventId);
 
     return {
@@ -188,13 +158,8 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
     if (rankings.length === 0) return;
 
     for (const { participantId, score } of rankings) {
-      const progressState = await this.redisService.getProgressState(
-        eventId,
-        participantId,
-      );
-      const progressPct = progressState.progress
-        ? parseFloat(progressState.progress)
-        : 0;
+      const progressState = await this.redisService.getProgressState(eventId, participantId);
+      const progressPct = progressState.progress ? parseFloat(progressState.progress) : 0;
       const checkpoints = progressState.checkpointsCompleted
         ? parseInt(progressState.checkpointsCompleted, 10)
         : 0;
@@ -229,8 +194,6 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
         });
     }
 
-    this.logger.log(
-      `[Ranking] 💾 Flushed ${rankings.length} rankings for event ${eventId}`,
-    );
+    this.logger.log(`[Ranking] 💾 Flushed ${rankings.length} rankings for event ${eventId}`);
   }
 }

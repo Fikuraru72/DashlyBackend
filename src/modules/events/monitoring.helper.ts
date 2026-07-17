@@ -27,19 +27,13 @@ export interface EventForMonitoring {
  * Calculates the monitoring window boundaries for an event.
  * Returns null if startTime or endTime are not set.
  */
-export function getMonitoringWindow(
-  event: EventForMonitoring,
-): MonitoringWindow | null {
+export function getMonitoringWindow(event: EventForMonitoring): MonitoringWindow | null {
   if (!event.startTime || !event.endTime) {
     return null;
   }
 
-  const actualStart = new Date(
-    event.startTime.getTime() - event.monitoringStartOffset * 60 * 1000,
-  );
-  const actualEnd = new Date(
-    event.endTime.getTime() + event.monitoringEndOffset * 60 * 1000,
-  );
+  const actualStart = new Date(event.startTime.getTime() - event.monitoringStartOffset * 60 * 1000);
+  const actualEnd = new Date(event.endTime.getTime() + event.monitoringEndOffset * 60 * 1000);
   const now = new Date();
 
   const isOpen = now >= actualStart && now <= actualEnd;

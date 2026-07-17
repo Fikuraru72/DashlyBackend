@@ -4,10 +4,7 @@ import { DB_CONNECTION } from '../../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../db/schema';
 import { inArray, eq } from 'drizzle-orm';
-import {
-  getMonitoringWindow,
-  EventForMonitoring,
-} from '../../events/monitoring.helper';
+import { getMonitoringWindow, EventForMonitoring } from '../../events/monitoring.helper';
 import { EventsGateway } from '../../websocket/events.gateway';
 
 @Injectable()
@@ -52,9 +49,7 @@ export class EventStatusScheduler {
             .where(eq(schema.events.id, event.id));
 
           this.eventsGateway.broadcastEventStatus(event.id, 'LIVE');
-          this.logger.log(
-            `Event ${event.id} automatically changed status to LIVE`,
-          );
+          this.logger.log(`Event ${event.id} automatically changed status to LIVE`);
         }
 
         // Check if we need to FINISH the event
@@ -65,9 +60,7 @@ export class EventStatusScheduler {
             .where(eq(schema.events.id, event.id));
 
           this.eventsGateway.broadcastEventStatus(event.id, 'FINISHED');
-          this.logger.log(
-            `Event ${event.id} automatically changed status to FINISHED`,
-          );
+          this.logger.log(`Event ${event.id} automatically changed status to FINISHED`);
         }
       }
     } catch (error) {

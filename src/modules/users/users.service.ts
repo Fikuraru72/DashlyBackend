@@ -9,20 +9,16 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
-  ) {}
+  constructor(@Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>) {}
 
   async updateProfile(userId: number, dto: UpdateUserDto) {
-    const updateData: any = { ...dto };
-
-    if (dto.password) {
-      updateData.password = await bcrypt.hash(dto.password, 10);
-    }
-
     const [updatedUser] = await this.db
       .update(schema.users)
-      .set(updateData)
+      .set({
+        phone: dto.phone,
+        healthInfo: dto.healthInfo,
+        roleId: dto.roleId,
+      })
       .where(eq(schema.users.id, userId))
       .returning();
 
@@ -49,17 +45,19 @@ export class UsersService {
   }
 
   async getUserStats(userId: number) {
-    const allEvents = await this.db
+    const finishedEvents = await this.db
       .select({
         distanceCovered: schema.eventParticipants.distanceCovered,
-        participantState: schema.eventParticipants.participantState,
       })
       .from(schema.eventParticipants)
-      .where(eq(schema.eventParticipants.userId, userId));
+      .where(
+        and(
+          eq(schema.eventParticipants.userId, userId),
+          eq(schema.eventParticipants.participantState, 'FINISHED'),
+        ),
+      );
 
-    const totalEvents = allEvents.length;
-    const finishedEvents = allEvents.filter((e) => e.participantState === 'FINISHED');
-    
+    const totalEvents = finishedEvents.length;
     const totalDistanceMeters = finishedEvents.reduce(
       (acc, curr) => acc + (curr.distanceCovered || 0),
       0,
@@ -69,7 +67,7 @@ export class UsersService {
     return {
       totalDistance: parseFloat(totalDistance.toFixed(2)),
       totalEvents,
-      avgSpeed: finishedEvents.length > 0 ? 12.5 : 0, // MVP placeholder
+      avgSpeed: totalEvents > 0 ? 12.5 : 0, // MVP placeholder
       points: Math.floor(totalDistanceMeters / 100),
     };
   }
@@ -90,8 +88,12 @@ export class UsersService {
     const [user] = await this.db
       .insert(schema.users)
       .values({
-        ...createUserDto,
+        email: createUserDto.email,
+        name: createUserDto.name,
         password: hashedPassword,
+        roleId: createUserDto.roleId,
+        phone: createUserDto.phone,
+        healthInfo: createUserDto.healthInfo,
       })
       .returning();
     return user;

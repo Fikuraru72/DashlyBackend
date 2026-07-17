@@ -8,7 +8,6 @@ import Redis, { Redis as RedisClient } from 'ioredis';
  * Provides primitive get/set operations for:
  *   - Participant state (last known position, speed, timestamps)
  *   - Geospatial position index (GEOADD / GEOPOS)
- *   - Message deduplication set (SADD / SISMEMBER)
  *   - Identity cache (participantId → userId)
  *
  * ⚠️  NO business logic lives here. No haversine, no filtering decisions,
@@ -27,31 +26,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  onModuleDestroy() {
-    this.redisClient.quit();
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  MESSAGE DEDUPLICATION
-  // ═══════════════════════════════════════════════════════════════
-
-  /** Returns true if msgId was already seen (duplicate). */
-  async isMessageProcessed(eventId: number, msgId: string): Promise<boolean> {
-    const key = `processed_msgs:${eventId}`;
-    const added = await this.redisClient.sadd(key, msgId);
-    if (added === 1) {
-      await this.redisClient.expire(key, 3600); // 1 hour TTL
-    }
-    return added === 0; // 0 = already existed = duplicate
+  async onModuleDestroy() {
+    await this.redisClient.quit();
   }
 
   // ═══════════════════════════════════════════════════════════════
   //  PARTICIPANT STATE (READ)
   // ═══════════════════════════════════════════════════════════════
 
-  async getParticipantStats(
-    participantId: number,
-  ): Promise<Record<string, string>> {
+  async getParticipantStats(participantId: number): Promise<Record<string, string>> {
     const key = `participant_stats:${participantId}`;
     return this.redisClient.hgetall(key);
   }
@@ -86,9 +69,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
         results.push({
           participantId: parseInt(participantId, 10),
-          userId: stats.userId
-            ? parseInt(stats.userId, 10)
-            : parseInt(participantId, 10),
+          userId: stats.userId ? parseInt(stats.userId, 10) : parseInt(participantId, 10),
           lat: parseFloat(pos[0][1]),
           lng: parseFloat(pos[0][0]),
           ...stats,
@@ -133,19 +114,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await pipeline.exec();
   }
 
-  async setParticipantOffline(
-    eventId: number,
-    participantId: number,
-  ): Promise<void> {
+  async setParticipantOffline(eventId: number, participantId: number): Promise<void> {
     const statsKey = `participant_stats:${participantId}`;
     await this.redisClient.hset(statsKey, 'isOffline', 'true');
     await this.redisClient.expire(statsKey, 60);
   }
 
-  async setParticipantOnline(
-    eventId: number,
-    participantId: number,
-  ): Promise<void> {
+  async setParticipantOnline(eventId: number, participantId: number): Promise<void> {
     const statsKey = `participant_stats:${participantId}`;
     await this.redisClient.hset(statsKey, {
       isOffline: 'false',
@@ -158,18 +133,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   //  IDENTITY CACHE (participantId → userId)
   // ═══════════════════════════════════════════════════════════════
 
-  async getCachedParticipant(
-    participantKey: string | number,
-  ): Promise<number | null> {
+  async getCachedParticipant(participantKey: string | number): Promise<number | null> {
     const key = `identity:${participantKey}`;
     const val = await this.redisClient.get(key);
     return val ? parseInt(val, 10) : null;
   }
 
-  async setCachedParticipant(
-    participantKey: string | number,
-    userId: number,
-  ): Promise<void> {
+  async setCachedParticipant(participantKey: string | number, userId: number): Promise<void> {
     const key = `identity:${participantKey}`;
     await this.redisClient.set(key, userId.toString(), 'EX', 3600); // 1 hour
   }
@@ -206,21 +176,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   //  RANKING (Redis Sorted Set)
   // ═══════════════════════════════════════════════════════════════
 
-  async updateRankingScore(
-    eventId: number,
-    participantId: number,
-    score: number,
-  ): Promise<void> {
+  async updateRankingScore(eventId: number, participantId: number, score: number): Promise<void> {
     const key = `ranking:${eventId}`;
     await this.redisClient.zadd(key, score, participantId.toString());
     await this.redisClient.expire(key, 86400);
   }
 
   /** Returns 0-based rank (null if not in set). Caller should add 1 for display. */
-  async getRank(
-    eventId: number,
-    participantId: number,
-  ): Promise<number | null> {
+  async getRank(eventId: number, participantId: number): Promise<number | null> {
     const key = `ranking:${eventId}`;
     const rank = await this.redisClient.zrevrank(key, participantId.toString());
     return rank;
@@ -232,9 +195,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Returns all members sorted by score descending: [{ participantId, score }] */
-  async getAllRankings(
-    eventId: number,
-  ): Promise<{ participantId: number; score: number }[]> {
+  async getAllRankings(eventId: number): Promise<{ participantId: number; score: number }[]> {
     const key = `ranking:${eventId}`;
     const raw = await this.redisClient.zrevrange(key, 0, -1, 'WITHSCORES');
     const result: { participantId: number; score: number }[] = [];
@@ -251,10 +212,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   //  PROGRESS CACHE (per-participant progress state)
   // ═══════════════════════════════════════════════════════════════
 
-  async getProgressState(
-    eventId: number,
-    participantId: number,
-  ): Promise<Record<string, string>> {
+  async getProgressState(eventId: number, participantId: number): Promise<Record<string, string>> {
     const key = `progress:${eventId}:${participantId}`;
     return this.redisClient.hgetall(key);
   }
@@ -287,20 +245,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   //  OFF-ROUTE COUNTER
   // ═══════════════════════════════════════════════════════════════
 
-  async getOffRouteCount(
-    eventId: number,
-    participantId: number,
-  ): Promise<number> {
+  async getOffRouteCount(eventId: number, participantId: number): Promise<number> {
     const key = `offroute:${eventId}:${participantId}`;
     const val = await this.redisClient.get(key);
     return val ? parseInt(val, 10) : 0;
   }
 
-  async setOffRouteCount(
-    eventId: number,
-    participantId: number,
-    count: number,
-  ): Promise<void> {
+  async setOffRouteCount(eventId: number, participantId: number, count: number): Promise<void> {
     const key = `offroute:${eventId}:${participantId}`;
     if (count === 0) {
       await this.redisClient.del(key);
@@ -353,27 +304,18 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.redisClient.del(key);
   }
 
-  async getStopAlertSent(
-    eventId: number,
-    participantId: number,
-  ): Promise<boolean> {
+  async getStopAlertSent(eventId: number, participantId: number): Promise<boolean> {
     const key = `stopalert:${eventId}:${participantId}`;
     const val = await this.redisClient.get(key);
     return val === 'true';
   }
 
-  async setStopAlertSent(
-    eventId: number,
-    participantId: number,
-  ): Promise<void> {
+  async setStopAlertSent(eventId: number, participantId: number): Promise<void> {
     const key = `stopalert:${eventId}:${participantId}`;
     await this.redisClient.set(key, 'true', 'EX', 3600); // Expiry 1 hour is plenty for a stop
   }
 
-  async clearStopAlertSent(
-    eventId: number,
-    participantId: number,
-  ): Promise<void> {
+  async clearStopAlertSent(eventId: number, participantId: number): Promise<void> {
     const key = `stopalert:${eventId}:${participantId}`;
     await this.redisClient.del(key);
   }
@@ -393,10 +335,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** 100-event Replay Buffer for debugging. Memory safe with LTRIM and EXPIRE. */
-  async pushEventToReplayBuffer(
-    participantId: number,
-    event: any,
-  ): Promise<void> {
+  async pushEventToReplayBuffer(participantId: number, event: any): Promise<void> {
     const key = `replay:${participantId}`;
     const pipeline = this.redisClient.pipeline();
     pipeline.lpush(key, JSON.stringify(event));

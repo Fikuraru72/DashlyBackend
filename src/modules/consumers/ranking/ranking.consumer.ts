@@ -14,8 +14,6 @@ export class RankingConsumer {
   private readonly logger = new Logger(RankingConsumer.name);
 
   onModuleInit() {
-    this.logger.log(
-      'Ranking consumer registered (placeholder — no worker active)',
-    );
+    this.logger.log('Ranking consumer registered (placeholder — no worker active)');
   }
 }

@@ -1,23 +1,16 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventsService } from './events.service';
 import { DB_CONNECTION } from '../../db/database.module';
 import { RedisService } from '../redis/redis.service';
 import { OsrmService } from './osrm.service';
 import { JwtService } from '@nestjs/jwt';
-import {
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-  ConflictException,
-} from '@nestjs/common';
-import * as schema from '../../db/schema';
+import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import * as helper from './monitoring.helper';
 
-jest.mock('./monitoring.helper', () => ({
-  getMonitoringWindow: jest
-    .fn()
-    .mockReturnValue({ start: new Date(), end: new Date() }),
-  isMonitoringWindowOpen: jest.fn(),
+vi.mock('./monitoring.helper', () => ({
+  getMonitoringWindow: vi.fn().mockReturnValue({ start: new Date(), end: new Date() }),
+  isMonitoringWindowOpen: vi.fn(),
 }));
 
 describe('EventsService', () => {
@@ -30,41 +23,41 @@ describe('EventsService', () => {
     dbMock = {
       query: {
         events: {
-          findFirst: jest.fn(),
-          findMany: jest.fn(),
+          findFirst: vi.fn(),
+          findMany: vi.fn(),
         },
         eventStaff: {
-          findFirst: jest.fn(),
-          findMany: jest.fn(),
+          findFirst: vi.fn(),
+          findMany: vi.fn(),
         },
         eventParticipants: {
-          findFirst: jest.fn(),
+          findFirst: vi.fn(),
         },
       },
-      insert: jest.fn().mockReturnThis(),
-      values: jest.fn().mockReturnThis(),
-      returning: jest.fn(),
-      update: jest.fn().mockReturnThis(),
-      set: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      transaction: jest.fn((cb) => cb(dbMock)),
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      innerJoin: jest.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      values: vi.fn().mockReturnThis(),
+      returning: vi.fn(),
+      update: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      transaction: vi.fn((cb) => cb(dbMock)),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      innerJoin: vi.fn().mockReturnThis(),
     };
 
     redisMock = {
-      getAllParticipantPositions: jest.fn(),
+      getAllParticipantPositions: vi.fn(),
     };
     osrmMock = {
-      normalizeRoute: jest.fn().mockResolvedValue(null),
+      normalizeRoute: vi.fn().mockResolvedValue(null),
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventsService,
         { provide: DB_CONNECTION, useValue: dbMock },
         { provide: RedisService, useValue: redisMock },
-        { provide: JwtService, useValue: { sign: jest.fn() } },
+        { provide: JwtService, useValue: { sign: vi.fn() } },
         { provide: OsrmService, useValue: osrmMock },
       ],
     }).compile();
@@ -73,24 +66,24 @@ describe('EventsService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getEventById', () => {
     it('should throw NotFoundException if event not found', async () => {
       dbMock.query.events.findFirst.mockResolvedValue(null);
-      await expect(
-        service.getEventById(1, { id: 1, role: 'PARTICIPANT' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getEventById(1, { id: 1, role: 'PARTICIPANT' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ForbiddenException if STAFF is not assigned', async () => {
       dbMock.query.events.findFirst.mockResolvedValue({ id: 1, name: 'Event' });
       dbMock.query.eventStaff.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.getEventById(1, { id: 2, role: 'STAFF' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.getEventById(1, { id: 2, role: 'STAFF' })).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should return event details for PARTICIPANT', async () => {
@@ -112,14 +105,10 @@ describe('EventsService', () => {
         name: 'Event',
         status: 'IDLE',
       });
-      (helper.isMonitoringWindowOpen as jest.Mock).mockReturnValue(false);
+      vi.mocked(helper.isMonitoringWindowOpen).mockReturnValue(false);
 
       await expect(
-        service.updateEventStatus(
-          1,
-          { id: 1, role: 'SUPER_ADMIN' },
-          { status: 'LIVE' },
-        ),
+        service.updateEventStatus(1, { id: 1, role: 'SUPER_ADMIN' }, { status: 'LIVE' }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -129,7 +118,7 @@ describe('EventsService', () => {
         name: 'Event',
         status: 'IDLE',
       });
-      (helper.isMonitoringWindowOpen as jest.Mock).mockReturnValue(true);
+      vi.mocked(helper.isMonitoringWindowOpen).mockReturnValue(true);
       dbMock.update.mockReturnThis();
       dbMock.set.mockReturnThis();
       dbMock.where.mockReturnThis();
@@ -148,9 +137,9 @@ describe('EventsService', () => {
   describe('joinEventViaToken', () => {
     it('should throw NotFoundException on invalid token', async () => {
       dbMock.query.events.findFirst.mockResolvedValue(null);
-      await expect(
-        service.joinEventViaToken({ id: 1 }, 'INVALID'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.joinEventViaToken({ id: 1 }, 'INVALID')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ForbiddenException if event is FINISHED', async () => {
@@ -158,9 +147,9 @@ describe('EventsService', () => {
         id: 1,
         status: 'FINISHED',
       });
-      await expect(
-        service.joinEventViaToken({ id: 1 }, 'VALID'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.joinEventViaToken({ id: 1 }, 'VALID')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw ForbiddenException if capacity reached', async () => {
@@ -169,9 +158,11 @@ describe('EventsService', () => {
         currentCount: 10,
         maxParticipants: 10,
       });
-      await expect(
-        service.joinEventViaToken({ id: 1 }, 'VALID'),
-      ).rejects.toThrow(ForbiddenException);
+      dbMock.query.eventParticipants.findFirst.mockResolvedValue(null);
+      dbMock.returning.mockResolvedValue([]);
+      await expect(service.joinEventViaToken({ id: 1 }, 'VALID')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should join event successfully', async () => {

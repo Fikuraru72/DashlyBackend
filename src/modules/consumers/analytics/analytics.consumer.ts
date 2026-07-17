@@ -14,8 +14,6 @@ export class AnalyticsConsumer {
   private readonly logger = new Logger(AnalyticsConsumer.name);
 
   onModuleInit() {
-    this.logger.log(
-      'Analytics consumer registered (placeholder — no worker active)',
-    );
+    this.logger.log('Analytics consumer registered (placeholder — no worker active)');
   }
 }

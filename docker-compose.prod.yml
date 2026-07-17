@@ -10,7 +10,7 @@ services:
     volumes:
       - ./.env:/app/.env:ro
     ports:
-      - "127.0.0.1:3000:3000"
+      - '127.0.0.1:3000:3000'
     depends_on:
       - redis
       - mosquitto
@@ -24,14 +24,14 @@ services:
     restart: always
     command: redis-server --save 60 1 --loglevel warning --maxmemory 128mb --maxmemory-policy allkeys-lru
     ports:
-      - "127.0.0.1:6379:6379"
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis_data:/data
     mem_limit: 160m
     networks:
       - dashly-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,7 +41,7 @@ services:
     container_name: dashly_mosquitto
     restart: always
     ports:
-      - "1883:1883"
+      - '127.0.0.1:1883:1883'
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     mem_limit: 64m

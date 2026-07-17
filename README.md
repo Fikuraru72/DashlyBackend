@@ -73,7 +73,6 @@ Default seeded admin:
 admin@dashly.com / password123
 ```
 
-
 ## OSRM route normalization
 
 Dashly can normalize fixed event routes through the public OSRM demo server. No OSRM Docker service or local map data is required.
@@ -123,7 +122,6 @@ E2E tests:
 ```bash
 vp run test:e2e
 ```
-
 
 ## Authentication and roles
 

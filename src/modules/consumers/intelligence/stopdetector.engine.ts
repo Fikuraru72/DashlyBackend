@@ -20,12 +20,7 @@ export class StopDetectorEngine {
 
   constructor(private readonly redisService: RedisService) {}
 
-  private calculateEuclideanDist(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number,
-  ): number {
+  private calculateEuclideanDist(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const M_PER_DEG_LAT = 111320;
     const cosLat = Math.cos((((lat1 + lat2) / 2) * Math.PI) / 180);
     const M_PER_DEG_LNG = 111320 * cosLat;
@@ -56,23 +51,14 @@ export class StopDetectorEngine {
       return { stopped: false, stoppedDurationSec: 0, justStopped: false };
     }
 
-    const stopState = await this.redisService.getStopState(
-      eventId,
-      participantId,
-    );
+    const stopState = await this.redisService.getStopState(eventId, participantId);
 
     if (!stopState) {
       // ── No active stop session. Should we start one? ──
       // Use instantaneous speed to detect initial stop
       if (speedCalculated < this.SPEED_THRESHOLD) {
         // Set the current location as the Spatial Anchor
-        await this.redisService.setStopState(
-          eventId,
-          participantId,
-          lat,
-          lng,
-          capturedAtMs,
-        );
+        await this.redisService.setStopState(eventId, participantId, lat, lng, capturedAtMs);
       }
       return { stopped: false, stoppedDurationSec: 0, justStopped: false };
     }
@@ -99,10 +85,7 @@ export class StopDetectorEngine {
 
     if (durationMs >= this.STOP_DURATION_MS) {
       // Check if we already alerted for this stop session
-      const alertSent = await this.redisService.getStopAlertSent(
-        eventId,
-        participantId,
-      );
+      const alertSent = await this.redisService.getStopAlertSent(eventId, participantId);
       let justStopped = false;
 
       if (!alertSent) {

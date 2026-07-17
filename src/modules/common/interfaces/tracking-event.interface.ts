@@ -153,3 +153,5 @@ export interface ParticipantCacheState {
 // ─── Queue Names (single source of truth) ────────────────────────
 export const QUEUE_TRACKING_RAW = 'tracking-events-raw';
 export const QUEUE_TRACKING_ENRICHED = 'tracking-events-enriched';
+export const QUEUE_TRACKING_DB = 'tracking-events-db';
+export const QUEUE_TRACKING_WS = 'tracking-events-ws';

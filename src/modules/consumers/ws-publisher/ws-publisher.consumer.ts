@@ -1,16 +1,8 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Worker, Job } from 'bullmq';
 import { TrackingStreamService } from '../../stream/tracking-stream.service';
 import { EventsGateway } from '../../websocket/events.gateway';
-import {
-  TrackingEvent,
-  QUEUE_TRACKING_ENRICHED,
-} from '../../common/interfaces/tracking-event.interface';
+import { TrackingEvent, QUEUE_TRACKING_WS } from '../../common/interfaces/tracking-event.interface';
 import Redis from 'ioredis';
 
 /**
@@ -43,7 +35,7 @@ export class WsPublisherConsumer implements OnModuleInit, OnModuleDestroy {
     this.workerConnection = this.stream.createWorkerConnection();
 
     this.worker = new Worker(
-      QUEUE_TRACKING_ENRICHED,
+      QUEUE_TRACKING_WS,
       async (job: Job<TrackingEvent>) => {
         this.process(job.data);
       },
@@ -57,9 +49,7 @@ export class WsPublisherConsumer implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`WS Publisher job ${job?.id} failed:`, err);
     });
 
-    this.logger.log(
-      'WS Publisher consumer started on queue: ' + QUEUE_TRACKING_ENRICHED,
-    );
+    this.logger.log('WS Publisher consumer started on queue: ' + QUEUE_TRACKING_WS);
   }
 
   async onModuleDestroy() {

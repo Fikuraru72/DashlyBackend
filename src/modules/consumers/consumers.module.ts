@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TrackingEnrichmentConsumer } from './enrichment/tracking-enrichment.consumer';
 import { DbWriterConsumer } from './db-writer/db-writer.consumer';
 import { WsPublisherConsumer } from './ws-publisher/ws-publisher.consumer';
+import { EnrichedFanoutConsumer } from './fanout/enriched-fanout.consumer';
 import { SosConsumer } from './sos/sos.consumer';
 import { AnalyticsConsumer } from './analytics/analytics.consumer';
 import { RankingConsumer } from './ranking/ranking.consumer';
@@ -16,14 +17,12 @@ import { RankingEngine } from './intelligence/ranking.engine';
 import { OffRouteEngine } from './intelligence/offroute.engine';
 import { StopDetectorEngine } from './intelligence/stopdetector.engine';
 
-
-import { EventsModule } from '../events/events.module';
-
 @Module({
-  imports: [StreamModule, DatabaseModule, WebSocketModule, RedisModule, EventsModule],
+  imports: [StreamModule, DatabaseModule, WebSocketModule, RedisModule],
   controllers: [],
   providers: [
     TrackingEnrichmentConsumer,
+    EnrichedFanoutConsumer,
     DbWriterConsumer,
     WsPublisherConsumer,
     SosConsumer,

@@ -17,18 +17,13 @@ export class OsrmService {
 
   constructor(private readonly configService: ConfigService) {}
 
-  async normalizeRoute(
-    category: EventCategory,
-    geojson: unknown,
-  ): Promise<NormalizedRoute | null> {
+  async normalizeRoute(category: EventCategory, geojson: unknown): Promise<NormalizedRoute | null> {
     const rawRoute = this.extractLineString(geojson);
     if (!rawRoute) return null;
 
     const fallback = {
       geoJson: rawRoute,
-      totalDistanceMeters: Math.round(
-        this.calculateDistance(rawRoute.geometry.coordinates),
-      ),
+      totalDistanceMeters: Math.round(this.calculateDistance(rawRoute.geometry.coordinates)),
     };
 
     if (
@@ -40,9 +35,7 @@ export class OsrmService {
 
     try {
       const coordinates = this.limitWaypoints(rawRoute.geometry.coordinates);
-      const coordinatePath = coordinates
-        .map(([lng, lat]) => `${lng},${lat}`)
-        .join(';');
+      const coordinatePath = coordinates.map(([lng, lat]) => `${lng},${lat}`).join(';');
       const profile = this.getProfile(category);
       const url = `${this.getBaseUrl()}/route/v1/${profile}/${coordinatePath}?overview=full&geometries=geojson&steps=false`;
 
@@ -226,9 +219,7 @@ export class OsrmService {
         typeof coordinate[1] === 'number',
     );
 
-    return coordinates.length >= 2
-      ? { type: 'LineString', coordinates }
-      : null;
+    return coordinates.length >= 2 ? { type: 'LineString', coordinates } : null;
   }
 
   private safeParse(value: string): unknown {
@@ -243,8 +234,9 @@ export class OsrmService {
     if (coordinates.length <= this.maxWaypoints) return coordinates;
 
     const step = (coordinates.length - 1) / (this.maxWaypoints - 1);
-    return Array.from({ length: this.maxWaypoints }, (_, index) =>
-      coordinates[Math.round(index * step)],
+    return Array.from(
+      { length: this.maxWaypoints },
+      (_, index) => coordinates[Math.round(index * step)],
     );
   }
 
@@ -264,10 +256,7 @@ export class OsrmService {
     const deltaLon = ((to[0] - from[0]) * Math.PI) / 180;
     const a =
       Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-      Math.cos(lat1) *
-        Math.cos(lat2) *
-        Math.sin(deltaLon / 2) *
-        Math.sin(deltaLon / 2);
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
     return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 }

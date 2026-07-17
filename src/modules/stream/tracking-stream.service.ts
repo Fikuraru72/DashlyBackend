@@ -1,11 +1,6 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Queue, Worker, Job } from 'bullmq';
+import { Queue } from 'bullmq';
 import Redis, { Redis as RedisClient } from 'ioredis';
 import {
   TrackingEvent,
@@ -65,6 +60,7 @@ export class TrackingStreamService implements OnModuleInit, OnModuleDestroy {
       backoff: { type: 'exponential', delay: 1000 },
       removeOnComplete: 1000,
       removeOnFail: 5000,
+      jobId: event.messageId,
     });
   }
 
@@ -75,6 +71,7 @@ export class TrackingStreamService implements OnModuleInit, OnModuleDestroy {
       backoff: { type: 'exponential', delay: 1000 },
       removeOnComplete: 1000,
       removeOnFail: 5000,
+      jobId: event.messageId,
     });
   }
 

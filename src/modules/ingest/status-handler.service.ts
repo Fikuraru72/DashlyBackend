@@ -1,7 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { EventsGateway } from '../websocket/events.gateway';
 import { RedisService } from '../redis/redis.service';
-import { IdentityCacheService } from '../tracking/identity-cache.service';
 import { RawIngestPayload } from '../common/interfaces/tracking-event.interface';
 import { DB_CONNECTION } from '../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -80,10 +79,7 @@ export class StatusHandlerService {
         `[Status Handler] ✅ Participant ${participantId} successfully transitioned to TRACKING state`,
       );
 
-      const pos = await this.redisService.getParticipantPosition(
-        eventId,
-        participantId,
-      );
+      const pos = await this.redisService.getParticipantPosition(eventId, participantId);
       const stats = await this.redisService.getParticipantStats(participantId);
 
       if (pos) {
@@ -110,10 +106,7 @@ export class StatusHandlerService {
       await this.redisService.setParticipantOffline(eventId, participantId);
 
       // 3. Fetch last known position to broadcast accurately
-      const pos = await this.redisService.getParticipantPosition(
-        eventId,
-        participantId,
-      );
+      const pos = await this.redisService.getParticipantPosition(eventId, participantId);
       const stats = await this.redisService.getParticipantStats(participantId);
 
       const participant = await this.db.query.eventParticipants.findFirst({

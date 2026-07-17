@@ -10,14 +10,11 @@ import {
 import { DB_CONNECTION } from '../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../db/schema';
-import { eq, and, isNull, asc } from 'drizzle-orm';
+import { eq, and, isNull, lt, sql } from 'drizzle-orm';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { UpdateEventStatusDto } from './dto/update-event-status.dto';
-import {
-  getMonitoringWindow,
-  isMonitoringWindowOpen,
-} from './monitoring.helper';
+import { getMonitoringWindow } from './monitoring.helper';
 import { RedisService } from '../redis/redis.service';
 import { OsrmService } from './osrm.service';
 import { JwtService } from '@nestjs/jwt';
@@ -33,7 +30,7 @@ export class EventsService {
     private readonly redisService: RedisService,
     private readonly jwtService: JwtService,
     private readonly osrmService: OsrmService,
-  ) { }
+  ) {}
 
   async getEventPositions(eventId: number) {
     return this.redisService.getAllParticipantPositions(eventId);
@@ -44,8 +41,7 @@ export class EventsService {
    * Used by dashboard on initial load / refresh to restore markers instantly.
    */
   async getLivePositions(eventId: number) {
-    const positions =
-      await this.redisService.getAllParticipantPositions(eventId);
+    const positions = await this.redisService.getAllParticipantPositions(eventId);
 
     // Get real names and state from DB in a single query
     const participantRows = await this.db
@@ -57,10 +53,7 @@ export class EventsService {
         bibNumber: schema.eventParticipants.bibNumber,
       })
       .from(schema.eventParticipants)
-      .innerJoin(
-        schema.users,
-        eq(schema.eventParticipants.userId, schema.users.id),
-      )
+      .innerJoin(schema.users, eq(schema.eventParticipants.userId, schema.users.id))
       .where(eq(schema.eventParticipants.eventId, eventId));
 
     const infoMap = new Map(participantRows.map((p) => [p.participantId, p]));
@@ -78,36 +71,6 @@ export class EventsService {
     });
   }
 
-  /**
-   * Fetch full path history for all participants in an event.
-   * Returns a map of userId -> array of [lng, lat] coordinates.
-   */
-  async getEventPathHistory(eventId: number) {
-    const logs = await this.db
-      .select({
-        userId: schema.locationLogs.userId,
-        lat: schema.locationLogs.latitude,
-        lng: schema.locationLogs.longitude,
-      })
-      .from(schema.locationLogs)
-      .where(eq(schema.locationLogs.eventId, eventId))
-      .orderBy(asc(schema.locationLogs.capturedAt));
-
-    const historyMap = new Map<number, number[][]>();
-    for (const log of logs) {
-      if (!historyMap.has(log.userId)) {
-        historyMap.set(log.userId, []);
-      }
-      historyMap.get(log.userId)!.push([log.lng, log.lat]); // GeoJSON format: [lng, lat]
-    }
-
-    const result: Record<number, number[][]> = {};
-    for (const [userId, path] of historyMap.entries()) {
-      result[userId] = path;
-    }
-    return result;
-  }
-
   async createEvent(user: any, dto: CreateEventDto) {
     const category = (dto.category as 'RUNNING' | 'CYCLING') || 'RUNNING';
     const normalizedRoute = dto.routeGeojson
@@ -116,10 +79,7 @@ export class EventsService {
 
     return this.db.transaction(async (tx) => {
       // 1. Generate unique 6-char alphanumeric code
-      const tokenCode = Math.random()
-        .toString(36)
-        .substring(2, 8)
-        .toUpperCase();
+      const tokenCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
       // 2. Insert Event
       const [newEvent] = await tx
@@ -133,17 +93,12 @@ export class EventsService {
           maxParticipants: dto.maxParticipants,
           dateEvent: new Date(dto.dateEvent),
           routeGeojson: normalizedRoute?.geoJson ?? dto.routeGeojson,
-          totalDistanceMeters:
-            normalizedRoute?.totalDistanceMeters ?? dto.totalDistanceMeters,
+          totalDistanceMeters: normalizedRoute?.totalDistanceMeters ?? dto.totalDistanceMeters,
           totalElevationMeters: dto.totalElevationMeters,
           startTime: new Date(dto.startTime),
           endTime: new Date(dto.endTime),
-          registrationOpen: dto.registrationOpen
-            ? new Date(dto.registrationOpen)
-            : null,
-          registrationClose: dto.registrationClose
-            ? new Date(dto.registrationClose)
-            : null,
+          registrationOpen: dto.registrationOpen ? new Date(dto.registrationOpen) : null,
+          registrationClose: dto.registrationClose ? new Date(dto.registrationClose) : null,
           locationName: dto.locationName,
           city: dto.city,
           province: dto.province,
@@ -225,10 +180,7 @@ export class EventsService {
 
   async getPublicEventById(eventId: number) {
     const event = await this.db.query.events.findFirst({
-      where: and(
-        eq(schema.events.id, eventId),
-        isNull(schema.events.deletedAt),
-      ),
+      where: and(eq(schema.events.id, eventId), isNull(schema.events.deletedAt)),
       columns: {
         id: true,
         name: true,
@@ -292,8 +244,21 @@ export class EventsService {
 
     let events: any[];
 
-    if (user.role === 'SUPER_ADMIN' || user.role === 'STAFF') {
+    if (user.role === 'SUPER_ADMIN') {
       events = await this.db.query.events.findMany({ where: baseWhere });
+    } else if (user.role === 'STAFF') {
+      const staffLinks = await this.db.query.eventStaff.findMany({
+        where: eq(schema.eventStaff.userId, user.id),
+      });
+      const eventIds = staffLinks
+        .map((link) => link.eventId)
+        .filter((id): id is number => id !== null);
+
+      if (eventIds.length === 0) return { success: true, data: [] };
+
+      events = await this.db.query.events.findMany({
+        where: (events, { inArray, and }) => and(inArray(events.id, eventIds), baseWhere),
+      });
     } else {
       events = [];
     }
@@ -340,16 +305,8 @@ export class EventsService {
         bibNumber: schema.eventParticipants.bibNumber,
       })
       .from(schema.events)
-      .innerJoin(
-        schema.eventParticipants,
-        eq(schema.events.id, schema.eventParticipants.eventId),
-      )
-      .where(
-        and(
-          eq(schema.eventParticipants.userId, user.id),
-          isNull(schema.events.deletedAt),
-        ),
-      );
+      .innerJoin(schema.eventParticipants, eq(schema.events.id, schema.eventParticipants.eventId))
+      .where(and(eq(schema.eventParticipants.userId, user.id), isNull(schema.events.deletedAt)));
 
     const enriched = joinedEvents.map((event) => ({
       ...event,
@@ -362,14 +319,19 @@ export class EventsService {
 
   async getEventById(eventId: number, user: any) {
     const event = await this.db.query.events.findFirst({
-      where: and(
-        eq(schema.events.id, eventId),
-        isNull(schema.events.deletedAt),
-      ),
+      where: and(eq(schema.events.id, eventId), isNull(schema.events.deletedAt)),
     });
 
     if (!event) {
       throw new NotFoundException('Event not found');
+    }
+
+    if (user.role === 'STAFF') {
+      const isStaff = await this.db.query.eventStaff.findFirst({
+        where: and(eq(schema.eventStaff.eventId, eventId), eq(schema.eventStaff.userId, user.id)),
+      });
+
+      if (!isStaff) throw new ForbiddenException('Not assigned to this event');
     }
 
     const monitoringWindow = getMonitoringWindow(event);
@@ -383,11 +345,7 @@ export class EventsService {
     };
   }
 
-  async updateEventStatus(
-    eventId: number,
-    user: any,
-    dto: UpdateEventStatusDto,
-  ) {
+  async updateEventStatus(eventId: number, user: any, dto: UpdateEventStatusDto) {
     const result = await this.getEventById(eventId, user);
     const event = result.data;
 
@@ -404,9 +362,7 @@ export class EventsService {
     // Validation: FINISHED only allowed if current status is LIVE
     if (dto.status === 'FINISHED') {
       if (event.status !== 'LIVE') {
-        throw new BadRequestException(
-          'Cannot finish event: event must be in LIVE status first.',
-        );
+        throw new BadRequestException('Cannot finish event: event must be in LIVE status first.');
       }
     }
 
@@ -433,26 +389,18 @@ export class EventsService {
     const updateData: any = {};
     if (dto.name !== undefined) updateData.name = dto.name;
     if (dto.description !== undefined) updateData.description = dto.description;
-    if (dto.maxParticipants !== undefined)
-      updateData.maxParticipants = dto.maxParticipants;
-    if (dto.dateEvent !== undefined)
-      updateData.dateEvent = new Date(dto.dateEvent);
+    if (dto.maxParticipants !== undefined) updateData.maxParticipants = dto.maxParticipants;
+    if (dto.dateEvent !== undefined) updateData.dateEvent = new Date(dto.dateEvent);
     if (dto.routeGeojson !== undefined) {
-      const category = (dto.category ?? existing.data.category) as
-        | 'RUNNING'
-        | 'CYCLING';
-      const normalizedRoute = await this.osrmService.normalizeRoute(
-        category,
-        dto.routeGeojson,
-      );
+      const category = (dto.category ?? existing.data.category) as 'RUNNING' | 'CYCLING';
+      const normalizedRoute = await this.osrmService.normalizeRoute(category, dto.routeGeojson);
       updateData.routeGeojson = normalizedRoute?.geoJson ?? dto.routeGeojson;
       if (normalizedRoute) {
         updateData.totalDistanceMeters = normalizedRoute.totalDistanceMeters;
       }
     }
     if (dto.category !== undefined) updateData.category = dto.category;
-    if (dto.startTime !== undefined)
-      updateData.startTime = new Date(dto.startTime);
+    if (dto.startTime !== undefined) updateData.startTime = new Date(dto.startTime);
     if (dto.endTime !== undefined) updateData.endTime = new Date(dto.endTime);
     if (dto.monitoringStartOffset !== undefined)
       updateData.monitoringStartOffset = dto.monitoringStartOffset;
@@ -463,15 +411,10 @@ export class EventsService {
     if (dto.totalElevationMeters !== undefined)
       updateData.totalElevationMeters = dto.totalElevationMeters;
     if (dto.registrationOpen !== undefined)
-      updateData.registrationOpen = dto.registrationOpen
-        ? new Date(dto.registrationOpen)
-        : null;
+      updateData.registrationOpen = dto.registrationOpen ? new Date(dto.registrationOpen) : null;
     if (dto.registrationClose !== undefined)
-      updateData.registrationClose = dto.registrationClose
-        ? new Date(dto.registrationClose)
-        : null;
-    if (dto.locationName !== undefined)
-      updateData.locationName = dto.locationName;
+      updateData.registrationClose = dto.registrationClose ? new Date(dto.registrationClose) : null;
+    if (dto.locationName !== undefined) updateData.locationName = dto.locationName;
     if (dto.city !== undefined) updateData.city = dto.city;
     if (dto.province !== undefined) updateData.province = dto.province;
     if (dto.latitude !== undefined) updateData.latitude = dto.latitude;
@@ -511,37 +454,7 @@ export class EventsService {
     return { success: true, data: deleted };
   }
 
-  async getEventAnomalies(eventId: number) {
-    const recentAnomalies = await this.db.query.anomalies.findMany({
-      where: eq(schema.anomalies.eventId, eventId),
-      orderBy: (anomalies, { desc }) => [desc(anomalies.timestamp)],
-      limit: 50,
-      with: {
-        user: {
-          columns: {
-            id: true,
-            name: true,
-            avatar: true,
-            phone: true,
-          }
-        }
-      }
-    });
-
-    return recentAnomalies.map(a => ({
-      id: String(a.id),
-      eventId: a.eventId,
-      userId: a.userId,
-      type: a.type,
-      latitude: a.latitude,
-      longitude: a.longitude,
-      message: a.reason,
-      timestamp: a.timestamp.toISOString(),
-      name: a.user?.name,
-    }));
-  }
-
-  async getEventParticipants(eventId: number) {
+  async getParticipants(eventId: number) {
     const results = await this.db
       .select({
         id: schema.users.id,
@@ -553,42 +466,57 @@ export class EventsService {
         bibNumber: schema.eventParticipants.bibNumber,
       })
       .from(schema.eventParticipants)
-      .innerJoin(
-        schema.users,
-        eq(schema.eventParticipants.userId, schema.users.id),
-      )
+      .innerJoin(schema.users, eq(schema.eventParticipants.userId, schema.users.id))
       .where(eq(schema.eventParticipants.eventId, eventId));
 
     return { success: true, data: results };
   }
 
-  async getPublicParticipants(eventId: number) {
-    const results = await this.db
-      .select({
-        id: schema.users.id,
-        name: schema.users.name,
-        joinedAt: schema.eventParticipants.joinedAt,
-        bibNumber: schema.eventParticipants.bibNumber,
-        state: schema.eventParticipants.participantState,
-      })
-      .from(schema.eventParticipants)
-      .innerJoin(
-        schema.users,
-        eq(schema.eventParticipants.userId, schema.users.id),
-      )
-      .where(eq(schema.eventParticipants.eventId, eventId));
+  private async reserveParticipant(
+    tx: Parameters<Parameters<NodePgDatabase<typeof schema>['transaction']>[0]>[0],
+    event: typeof schema.events.$inferSelect,
+    userId: number,
+    participantState?: 'REGISTERED',
+  ) {
+    const existingParticipant = await tx.query.eventParticipants.findFirst({
+      where: and(
+        eq(schema.eventParticipants.eventId, event.id),
+        eq(schema.eventParticipants.userId, userId),
+      ),
+    });
+    if (existingParticipant) {
+      throw new ConflictException('You have already joined this event');
+    }
 
-    return { success: true, data: results };
+    const [updatedEvent] = await tx
+      .update(schema.events)
+      .set({ currentCount: sql`${schema.events.currentCount} + 1` })
+      .where(
+        and(
+          eq(schema.events.id, event.id),
+          lt(schema.events.currentCount, schema.events.maxParticipants),
+        ),
+      )
+      .returning();
+    if (!updatedEvent) {
+      throw new ForbiddenException('Event has reached maximum capacity');
+    }
+
+    const bibNumber = String(updatedEvent.currentCount).padStart(4, '0');
+    await tx.insert(schema.eventParticipants).values({
+      eventId: event.id,
+      userId,
+      bibNumber,
+      ...(participantState ? { participantState } : {}),
+    });
+    return { updatedEvent, bibNumber };
   }
 
   async joinEvent(user: any, eventId: number) {
     return this.db.transaction(async (tx) => {
       // 1. Find the event
       const event = await tx.query.events.findFirst({
-        where: and(
-          eq(schema.events.id, eventId),
-          isNull(schema.events.deletedAt),
-        ),
+        where: and(eq(schema.events.id, eventId), isNull(schema.events.deletedAt)),
       });
 
       if (!event) {
@@ -605,38 +533,7 @@ export class EventsService {
         throw new ForbiddenException('Registration deadline has passed');
       }
 
-      // 2. Check Capacity
-      if (event.currentCount >= event.maxParticipants) {
-        throw new ForbiddenException('Event has reached maximum capacity');
-      }
-
-      // 3. Prevent Duplicates
-      const existingParticipant = await tx.query.eventParticipants.findFirst({
-        where: and(
-          eq(schema.eventParticipants.eventId, event.id),
-          eq(schema.eventParticipants.userId, user.id),
-        ),
-      });
-
-      if (existingParticipant) {
-        throw new ConflictException('You have already joined this event');
-      }
-
-      // 4. Generate BIB Number
-      const bibNumber = String(event.currentCount + 1).padStart(4, '0');
-
-      // 5. Atomic Update
-      await tx.insert(schema.eventParticipants).values({
-        eventId: event.id,
-        userId: user.id,
-        bibNumber: bibNumber,
-      });
-
-      const [updatedEvent] = await tx
-        .update(schema.events)
-        .set({ currentCount: event.currentCount + 1 })
-        .where(eq(schema.events.id, event.id))
-        .returning();
+      const { updatedEvent, bibNumber } = await this.reserveParticipant(tx, event, user.id);
 
       const monitoringWindow = getMonitoringWindow(updatedEvent);
 
@@ -672,11 +569,11 @@ export class EventsService {
         throw new NotFoundException('Participant record not found. Please register first.');
       }
 
-      if (participant.participantState === 'CONFIRMED' || participant.participantState === 'TRACKING') {
-        return {
-          success: true,
-          message: 'BIB verified successfully. You are now ready to track.',
-        };
+      if (
+        participant.participantState === 'CONFIRMED' ||
+        participant.participantState === 'TRACKING'
+      ) {
+        throw new ConflictException('Your BIB is already verified.');
       }
 
       // Check if BIB matches
@@ -685,7 +582,8 @@ export class EventsService {
       }
 
       // Update state to CONFIRMED
-      await tx.update(schema.eventParticipants)
+      await tx
+        .update(schema.eventParticipants)
         .set({ participantState: 'CONFIRMED' })
         .where(eq(schema.eventParticipants.id, participant.id));
 
@@ -700,10 +598,7 @@ export class EventsService {
     return this.db.transaction(async (tx) => {
       // 1. Find the event
       const event = await tx.query.events.findFirst({
-        where: and(
-          eq(schema.events.token, token),
-          isNull(schema.events.deletedAt),
-        ),
+        where: and(eq(schema.events.token, token), isNull(schema.events.deletedAt)),
       });
 
       if (!event) {
@@ -715,38 +610,7 @@ export class EventsService {
         throw new ForbiddenException('Event has already finished');
       }
 
-      // 2. Check Capacity
-      if (event.currentCount >= event.maxParticipants) {
-        throw new ForbiddenException('Event has reached maximum capacity');
-      }
-
-      // 3. Prevent Duplicates
-      const existingParticipant = await tx.query.eventParticipants.findFirst({
-        where: and(
-          eq(schema.eventParticipants.eventId, event.id),
-          eq(schema.eventParticipants.userId, user.id),
-        ),
-      });
-
-      if (existingParticipant) {
-        throw new ConflictException('You have already joined this event');
-      }
-
-      // 4. Generate BIB Number
-      const bibNumber = String(event.currentCount + 1).padStart(4, '0');
-
-      // 5. Atomic Update
-      await tx.insert(schema.eventParticipants).values({
-        eventId: event.id,
-        userId: user.id,
-        bibNumber: bibNumber,
-      });
-
-      const [updatedEvent] = await tx
-        .update(schema.events)
-        .set({ currentCount: event.currentCount + 1 })
-        .where(eq(schema.events.id, event.id))
-        .returning();
+      const { updatedEvent, bibNumber } = await this.reserveParticipant(tx, event, user.id);
 
       const monitoringWindow = getMonitoringWindow(updatedEvent);
 
@@ -773,10 +637,7 @@ export class EventsService {
    */
   async getEventRaw(eventId: number) {
     return this.db.query.events.findFirst({
-      where: and(
-        eq(schema.events.id, eventId),
-        isNull(schema.events.deletedAt),
-      ),
+      where: and(eq(schema.events.id, eventId), isNull(schema.events.deletedAt)),
     });
   }
 
@@ -784,10 +645,7 @@ export class EventsService {
     return this.db.transaction(async (tx) => {
       // 1. Find the event
       const event = await tx.query.events.findFirst({
-        where: and(
-          eq(schema.events.id, eventId),
-          isNull(schema.events.deletedAt),
-        ),
+        where: and(eq(schema.events.id, eventId), isNull(schema.events.deletedAt)),
       });
 
       if (!event) {
@@ -801,21 +659,16 @@ export class EventsService {
 
       // 3. Validate Time
       if (event.registrationClose && new Date() > new Date(event.registrationClose)) {
-        await tx.update(schema.events)
+        await tx
+          .update(schema.events)
           .set({ status: 'REGISTRATION_CLOSED' })
           .where(eq(schema.events.id, event.id));
-        throw new ForbiddenException('Registration has been closed because the deadline has passed');
+        throw new ForbiddenException(
+          'Registration has been closed because the deadline has passed',
+        );
       }
 
-      // 4. Check Capacity
-      if (event.currentCount >= event.maxParticipants) {
-        await tx.update(schema.events)
-          .set({ status: 'REGISTRATION_CLOSED' })
-          .where(eq(schema.events.id, event.id));
-        throw new ForbiddenException('Event has reached maximum capacity. Registration closed.');
-      }
-
-      // 5. Find or Create User
+      // 4. Find or Create User
       let user = await tx.query.users.findFirst({
         where: eq(schema.users.email, dto.email),
       });
@@ -828,43 +681,20 @@ export class EventsService {
 
         const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-        const [newUser] = await tx.insert(schema.users).values({
-          email: dto.email,
-          password: hashedPassword,
-          name: dto.name,
-          phone: dto.phone,
-          roleId: roleId,
-        }).returning();
+        const [newUser] = await tx
+          .insert(schema.users)
+          .values({
+            email: dto.email,
+            password: hashedPassword,
+            name: dto.name,
+            phone: dto.phone,
+            roleId: roleId,
+          })
+          .returning();
         user = newUser;
       }
 
-      // 6. Prevent Duplicates
-      const existingParticipant = await tx.query.eventParticipants.findFirst({
-        where: and(
-          eq(schema.eventParticipants.eventId, event.id),
-          eq(schema.eventParticipants.userId, user.id),
-        ),
-      });
-
-      if (existingParticipant) {
-        throw new ConflictException('You have already registered for this event');
-      }
-
-      // 7. Generate BIB Number
-      const bibNumber = String(event.currentCount + 1).padStart(4, '0');
-
-      // 8. Atomic Update
-      await tx.insert(schema.eventParticipants).values({
-        eventId: event.id,
-        userId: user.id,
-        bibNumber: bibNumber,
-        participantState: 'REGISTERED',
-      });
-
-      await tx
-        .update(schema.events)
-        .set({ currentCount: event.currentCount + 1 })
-        .where(eq(schema.events.id, event.id));
+      const { bibNumber } = await this.reserveParticipant(tx, event, user.id, 'REGISTERED');
 
       return {
         success: true,
@@ -872,13 +702,12 @@ export class EventsService {
           bibNumber,
           eventId: event.id,
           token: event.token, // Can be used for QR code
-          message: 'Registration successful! Please save your BIB number and download the Dashly App.',
+          message:
+            'Registration successful! Please save your BIB number and download the Dashly App.',
         },
       };
     });
   }
-
-
 
   async getParticipantTicket(userId: number, eventId: number) {
     const participantRows = await this.db
@@ -892,7 +721,7 @@ export class EventsService {
         and(
           eq(schema.eventParticipants.eventId, eventId),
           eq(schema.eventParticipants.userId, userId),
-        )
+        ),
       )
       .limit(1);
 
@@ -938,11 +767,7 @@ export class EventsService {
    * Update a participant's state (e.g., unfreeze a FROZEN participant).
    * Only accessible by SUPER_ADMIN or STAFF.
    */
-  async updateParticipantState(
-    eventId: number,
-    userId: number,
-    newState: string,
-  ) {
+  async updateParticipantState(eventId: number, userId: number, newState: string) {
     const validStates = ['REGISTERED', 'CONFIRMED', 'TRACKING', 'FROZEN', 'FINISHED'];
     if (!validStates.includes(newState)) {
       throw new BadRequestException(
@@ -953,7 +778,7 @@ export class EventsService {
     const participant = await this.db.query.eventParticipants.findFirst({
       where: and(
         eq(schema.eventParticipants.userId, userId),
-        eq(schema.eventParticipants.eventId, eventId)
+        eq(schema.eventParticipants.eventId, eventId),
       ),
     });
 
@@ -967,16 +792,6 @@ export class EventsService {
       .where(eq(schema.eventParticipants.id, participant.id))
       .returning();
 
-    if (newState === 'TRACKING') {
-      await this.db.delete(schema.anomalies)
-        .where(
-          and(
-            eq(schema.anomalies.eventId, eventId),
-            eq(schema.anomalies.userId, userId)
-          )
-        );
-    }
-
     this.logger.log(
       `[Events] Participant (User ${userId}) state changed: ${participant.participantState} → ${newState}`,
     );
@@ -985,68 +800,6 @@ export class EventsService {
       success: true,
       data: updated,
       message: `Participant state updated to ${newState}`,
-    };
-  }
-
-  async deleteAnomaly(eventId: number, anomalyId: number) {
-    const [deleted] = await this.db.delete(schema.anomalies)
-      .where(
-        and(
-          eq(schema.anomalies.id, anomalyId),
-          eq(schema.anomalies.eventId, eventId)
-        )
-      )
-      .returning();
-      
-    if (!deleted) {
-      throw new NotFoundException('Anomaly not found');
-    }
-    
-    return { success: true, data: deleted };
-  }
-
-  async deleteAnomalyByType(eventId: number, userId: number, type: string) {
-    const [deleted] = await this.db.delete(schema.anomalies)
-      .where(
-        and(
-          eq(schema.anomalies.userId, userId),
-          eq(schema.anomalies.eventId, eventId),
-          eq(schema.anomalies.type, type)
-        )
-      )
-      .returning();
-      
-    return { success: true, data: deleted };
-  }
-
-  async getMyLiveStats(eventId: number, user: any) {
-    const userId = user.id || user.sub;
-
-    const participant = await this.db.query.eventParticipants.findFirst({
-      where: and(
-        eq(schema.eventParticipants.eventId, eventId),
-        eq(schema.eventParticipants.userId, userId),
-      ),
-    });
-
-    if (!participant) {
-      throw new NotFoundException('Not joined');
-    }
-
-    const allRankings = await this.redisService.getAllRankings(eventId);
-    let rank: number | null = allRankings.findIndex((r) => r.participantId === participant.id) + 1;
-    if (rank === 0) rank = null;
-
-    const progress = await this.redisService.getProgressState(eventId, participant.id);
-
-    return {
-      success: true,
-      data: {
-        rank,
-        progressPercentage: progress?.progressPercentage ?? 0,
-        distanceCovered: progress?.distanceCovered ?? 0,
-        checkpointsCompleted: progress?.checkpointsCompleted ?? 0,
-      }
     };
   }
 }

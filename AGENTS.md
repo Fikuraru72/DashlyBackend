@@ -22,22 +22,24 @@ npm run start:prod         # Run compiled output
 
 ### Linting & Formatting
 ```bash
-npm run lint               # ESLint with auto-fix
-npm run format             # Prettier over src/**/*.ts and test/**/*.ts
+vp check                    # Oxfmt + Oxlint + TypeScript checks
+vp check --fix              # Apply safe formatting/lint fixes
+vp fmt --write              # Format with Oxfmt
+vp lint                     # Lint with Oxlint
 ```
 
 ### Testing
 ```bash
-npm test                        # Run all unit tests (Jest)
-npm run test:watch              # Watch mode
-npm run test:cov                # Coverage report
-npm run test:e2e                # End-to-end tests (test/jest-e2e.json)
+vp test                         # Run all unit tests (Vitest)
+vp test watch                   # Watch mode
+vp test --coverage              # Coverage report
+vp test test/app.e2e-spec.ts    # HTTP smoke test
 
 # Run a single test file
-npx jest src/modules/auth/auth.service.spec.ts
+vp test src/modules/auth/auth.service.spec.ts
 
 # Run tests matching a name pattern
-npx jest --testNamePattern="should register"
+vp test -t "should register"
 ```
 
 ### Database (Drizzle Kit)

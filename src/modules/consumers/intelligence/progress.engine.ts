@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from '../../redis/redis.service';
-import {
-  ProcessedRoute,
-  TrackingEvent,
-} from '../../common/interfaces/tracking-event.interface';
+import { ProcessedRoute, TrackingEvent } from '../../common/interfaces/tracking-event.interface';
 
 /**
  * ProgressEngine — GPX-based route progress calculation (HARDENED).
@@ -43,19 +40,12 @@ export class ProgressEngine {
     const failKey = `${eventId}:${participantId}`;
 
     // ── Read previous progress state ─────────────────────────────
-    const prevState = await this.redisService.getProgressState(
-      eventId,
-      participantId,
-    );
-    const lastSegmentIdx = prevState.lastSegmentIdx
-      ? parseInt(prevState.lastSegmentIdx, 10)
-      : 0;
+    const prevState = await this.redisService.getProgressState(eventId, participantId);
+    const lastSegmentIdx = prevState.lastSegmentIdx ? parseInt(prevState.lastSegmentIdx, 10) : 0;
     const prevCheckpoints = prevState.checkpointsCompleted
       ? parseInt(prevState.checkpointsCompleted, 10)
       : 0;
-    const prevProgress = prevState.progress
-      ? parseFloat(prevState.progress)
-      : 0;
+    const prevProgress = prevState.progress ? parseFloat(prevState.progress) : 0;
 
     // ── Graduated Snap Search ────────────────────────────────────
     // Phase 1: try ±5 window (normal case)
@@ -83,9 +73,7 @@ export class ProgressEngine {
 
           const result = {
             progressPercentage: prevProgress,
-            distanceToFinish: prevState.distToFinish
-              ? parseInt(prevState.distToFinish, 10)
-              : 0,
+            distanceToFinish: prevState.distToFinish ? parseInt(prevState.distToFinish, 10) : 0,
             snappedLat: prevState.snappedLat
               ? parseFloat(prevState.snappedLat)
               : route.coordinates[0][1],
@@ -109,15 +97,12 @@ export class ProgressEngine {
       this.snapFailures.delete(failKey);
     }
 
-    const { bestSegIdx, bestFraction, bestSnappedLat, bestSnappedLng } =
-      snapResult;
+    const { bestSegIdx, bestFraction, bestSnappedLat, bestSnappedLng } = snapResult;
 
     // ── Compute progress ─────────────────────────────────────────
     const segmentLength =
-      route.cumulativeDistances[bestSegIdx + 1] -
-      route.cumulativeDistances[bestSegIdx];
-    const distAlongRoute =
-      route.cumulativeDistances[bestSegIdx] + segmentLength * bestFraction;
+      route.cumulativeDistances[bestSegIdx + 1] - route.cumulativeDistances[bestSegIdx];
+    const distAlongRoute = route.cumulativeDistances[bestSegIdx] + segmentLength * bestFraction;
 
     let progressPercentage = (distAlongRoute / route.totalDistance) * 100;
     progressPercentage = Math.max(0, Math.min(100, progressPercentage));
@@ -175,10 +160,7 @@ export class ProgressEngine {
     bestSnappedLng: number;
   } {
     const searchStart = Math.max(0, lastSegmentIdx - windowBefore);
-    const searchEnd = Math.min(
-      route.segmentCount,
-      lastSegmentIdx + windowAfter,
-    );
+    const searchEnd = Math.min(route.segmentCount, lastSegmentIdx + windowAfter);
 
     let bestDist = Infinity;
     let bestSegIdx = lastSegmentIdx;
@@ -190,8 +172,14 @@ export class ProgressEngine {
       const [aLng, aLat] = route.coordinates[i];
       const [bLng, bLat] = route.coordinates[i + 1];
 
-      const { dist, fraction, closestLat, closestLng } =
-        this.projectPointOnSegment(lat, lng, aLat, aLng, bLat, bLng);
+      const { dist, fraction, closestLat, closestLng } = this.projectPointOnSegment(
+        lat,
+        lng,
+        aLat,
+        aLng,
+        bLat,
+        bLng,
+      );
 
       if (dist < bestDist) {
         bestDist = dist;
