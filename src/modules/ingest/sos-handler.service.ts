@@ -59,7 +59,7 @@ export class SosHandlerService {
     }
 
     // 3. Immediate WS broadcast
-    this.gateway.server.to(`event_${eventId}`).emit('sos_triggered', {
+    this.gateway.broadcastSosTriggered(eventId, {
       participantId,
       userId,
       lat: latNum,

@@ -753,7 +753,10 @@ docker/build-push-action@v7.3.0</code></pre>
             <li>Source: GitHub repository <code>DashlyBackend</code>.</li>
             <li>Branch: <code>master</code>.</li>
             <li>Compose path: <code>docker-compose.prod.yml</code>.</li>
-            <li>Compose type: standard Docker Compose, not Stack.</li>
+            <li>
+              Compose type: <strong>Stack</strong>. The production definition uses Docker Swarm
+              replicas and an overlay network.
+            </li>
             <li>
               Disable repository auto-deploy if GitHub Actions will trigger deployment after
               publishing the image. This avoids deploying before the GHCR image exists.
@@ -762,6 +765,8 @@ docker/build-push-action@v7.3.0</code></pre>
           <h3 id="environment-variables">Environment variables</h3>
           <p>Paste into Dokploy's Compose <strong>Environment</strong> tab:</p>
           <pre class="env"><code>BACKEND_IMAGE=ghcr.io/fikuraru72/dashly-backend:latest
+API_REPLICAS=2
+WORKER_REPLICAS=2
 NODE_ENV=production
 PORT=3000
 DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres?sslmode=require
@@ -783,6 +788,10 @@ OSRM_PROFILE=bicycle</code></pre>
           <p>
             Dokploy writes the environment to <code>.env</code>; the Compose file explicitly uses
             <code>env_file: .env</code> because Dokploy does not inject those values automatically.
+            Traefik load-balances the <code>app</code> replicas. The Redis Socket.IO adapter
+            synchronizes rooms and broadcasts between them. <code>ingest</code> and
+            <code>scheduler</code> stay at one replica to prevent duplicate MQTT consumption and
+            cron execution; BullMQ safely distributes jobs across the worker replicas.
           </p>
           <h3 id="ghcr-authentication-for-a-private-image">
             GHCR authentication for a private image
@@ -826,15 +835,20 @@ Certificate: Let&#39;s Encrypt</code></pre>
             Do not add <code>ports:</code> for the app. Dokploy/Traefik routes to the internal
             <code>3000</code> port.
           </p>
-          <p>Deploy. The startup sequence is:</p>
-          <ol type="1">
-            <li>Redis, Mosquitto, and OSRM become healthy.</li>
-            <li>
-              One-shot <code>migrate</code> runs <code>drizzle-kit migrate</code> against Supabase.
-            </li>
-            <li>Backend starts only if migration succeeds.</li>
-            <li>Traefik routes <code>api.example.com</code> to the healthy backend.</li>
-          </ol>
+          <p>
+            Before each schema-changing release, run the migration once from a trusted CI job or
+            Dokploy terminal:
+          </p>
+          <div class="sourceCode" id="cb27">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> run <span class="at">--rm</span> <span class="at">--env-file</span> .env <span class="st">&quot;</span><span class="va">$BACKEND_IMAGE</span><span class="st">&quot;</span> bunx drizzle-kit migrate</span></code></pre>
+          </div>
+          <p>
+            Then deploy the Stack. Redis, Mosquitto, and OSRM start alongside the separated API,
+            worker, MQTT-ingest, and scheduler services. Traefik routes
+            <code>api.example.com</code> to healthy API replicas.
+          </p>
           <div class="chapter-kicker">Phase 08 · Continuous delivery</div>
           <h2 id="8-connect-github-actions-to-dokploy-cd">
             8. Connect GitHub Actions to Dokploy CD
@@ -881,13 +895,13 @@ NEXT_PUBLIC_BACKEND_URL=https://api.example.com</code></pre>
           <div class="chapter-kicker">Phase 10 · Prove the system</div>
           <h2 id="10-verification">10. Verification</h2>
           <h3 id="backend">Backend</h3>
-          <div class="sourceCode" id="cb31">
+          <div class="sourceCode" id="cb32">
             <pre
               class="sourceCode bash"
-            ><code class="sourceCode bash"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">--fail</span> https://api.example.com/health/sync</span>
-<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">-i</span> <span class="at">-X</span> OPTIONS https://api.example.com/auth/login <span class="dt">\</span></span>
-<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;Origin: https://app.example.com&#39;</span> <span class="dt">\</span></span>
-<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;Access-Control-Request-Method: POST&#39;</span></span></code></pre>
+            ><code class="sourceCode bash"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">--fail</span> https://api.example.com/health/sync</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">-i</span> <span class="at">-X</span> OPTIONS https://api.example.com/auth/login <span class="dt">\</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;Origin: https://app.example.com&#39;</span> <span class="dt">\</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;Access-Control-Request-Method: POST&#39;</span></span></code></pre>
           </div>
           <p>Expected health response: HTTP 200 with database connectivity information.</p>
           <h3 id="osrm-from-the-compose-network">OSRM from the Compose network</h3>
@@ -895,21 +909,21 @@ NEXT_PUBLIC_BACKEND_URL=https://api.example.com</code></pre>
             Use Dokploy terminal on the <code>app</code> container or run from the deployment host
             with the project network:
           </p>
-          <div class="sourceCode" id="cb32">
-            <pre
-              class="sourceCode bash"
-            ><code class="sourceCode bash"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="st">&#39;http://osrm-bicycle:5000/route/v1/bicycle/106.827,-6.175;106.829,-6.177?overview=false&#39;</span></span></code></pre>
-          </div>
-          <p>Expected JSON contains <code>"code":"Ok"</code>.</p>
-          <h3 id="containers-and-resources">Containers and resources</h3>
           <div class="sourceCode" id="cb33">
             <pre
               class="sourceCode bash"
-            ><code class="sourceCode bash"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> ps</span>
-<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> stats <span class="at">--no-stream</span></span>
-<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> service ls</span>
-<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="fu">free</span> <span class="at">-h</span></span>
-<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="fu">df</span> <span class="at">-h</span></span></code></pre>
+            ><code class="sourceCode bash"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="st">&#39;http://osrm-bicycle:5000/route/v1/bicycle/106.827,-6.175;106.829,-6.177?overview=false&#39;</span></span></code></pre>
+          </div>
+          <p>Expected JSON contains <code>"code":"Ok"</code>.</p>
+          <h3 id="containers-and-resources">Containers and resources</h3>
+          <div class="sourceCode" id="cb34">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> ps</span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> stats <span class="at">--no-stream</span></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> service ls</span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a><span class="fu">free</span> <span class="at">-h</span></span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a><span class="fu">df</span> <span class="at">-h</span></span></code></pre>
           </div>
           <p>
             During normal runtime, OSRM should not consume 1.5 CPUs continuously. The CPU value is a
@@ -964,10 +978,10 @@ Disk alert:           80%</code></pre>
           </p>
           <h3 id="view-logs">View logs</h3>
           <p>Use Dokploy's per-service Logs tab, or:</p>
-          <div class="sourceCode" id="cb36">
+          <div class="sourceCode" id="cb37">
             <pre
               class="sourceCode bash"
-            ><code class="sourceCode bash"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> logs <span class="at">--tail</span> 200 <span class="at">-f</span> <span class="op">&lt;</span>container<span class="op">&gt;</span></span></code></pre>
+            ><code class="sourceCode bash"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> logs <span class="at">--tail</span> 200 <span class="at">-f</span> <span class="op">&lt;</span>container<span class="op">&gt;</span></span></code></pre>
           </div>
           <h3 id="roll-back-backend">Roll back backend</h3>
           <p>Use an immutable SHA tag published by CI:</p>
@@ -979,10 +993,10 @@ Disk alert:           80%</code></pre>
             schema compatibility first.
           </p>
           <h3 id="update-dokploy">Update Dokploy</h3>
-          <div class="sourceCode" id="cb38">
+          <div class="sourceCode" id="cb39">
             <pre
               class="sourceCode bash"
-            ><code class="sourceCode bash"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">-sSL</span> https://dokploy.com/install.sh <span class="kw">|</span> <span class="fu">sh</span> <span class="at">-s</span> update</span></code></pre>
+            ><code class="sourceCode bash"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">-sSL</span> https://dokploy.com/install.sh <span class="kw">|</span> <span class="fu">sh</span> <span class="at">-s</span> update</span></code></pre>
           </div>
           <p>Read Dokploy release notes before updating production.</p>
           <h3 id="update-osrm">Update OSRM</h3>

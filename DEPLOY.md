@@ -273,7 +273,7 @@ In Dokploy:
 4. Source: GitHub repository `DashlyBackend`.
 5. Branch: `master`.
 6. Compose path: `docker-compose.prod.yml`.
-7. Compose type: standard Docker Compose, not Stack.
+7. Compose type: **Stack**. The production definition uses Docker Swarm replicas and an overlay network.
 8. Disable repository auto-deploy if GitHub Actions will trigger deployment after publishing the image. This avoids deploying before the GHCR image exists.
 
 ### Environment variables
@@ -282,6 +282,8 @@ Paste into Dokploy's Compose **Environment** tab:
 
 ```env
 BACKEND_IMAGE=ghcr.io/fikuraru72/dashly-backend:latest
+API_REPLICAS=2
+WORKER_REPLICAS=2
 NODE_ENV=production
 PORT=3000
 DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres?sslmode=require
@@ -302,7 +304,7 @@ Generate the JWT secret locally:
 openssl rand -base64 48
 ```
 
-Dokploy writes the environment to `.env`; the Compose file explicitly uses `env_file: .env` because Dokploy does not inject those values automatically.
+Dokploy writes the environment to `.env`; the Compose file explicitly uses `env_file: .env` because Dokploy does not inject those values automatically. Traefik load-balances the `app` replicas. The Redis Socket.IO adapter synchronizes rooms and broadcasts between them. `ingest` and `scheduler` stay at one replica to prevent duplicate MQTT consumption and cron execution; BullMQ safely distributes jobs across the worker replicas.
 
 ### GHCR authentication for a private image
 
@@ -349,12 +351,13 @@ Certificate: Let's Encrypt
 
 Do not add `ports:` for the app. Dokploy/Traefik routes to the internal `3000` port.
 
-Deploy. The startup sequence is:
+Before each schema-changing release, run the migration once from a trusted CI job or Dokploy terminal:
 
-1. Redis, Mosquitto, and OSRM become healthy.
-2. One-shot `migrate` runs `drizzle-kit migrate` against Supabase.
-3. Backend starts only if migration succeeds.
-4. Traefik routes `api.example.com` to the healthy backend.
+```bash
+docker run --rm --env-file .env "$BACKEND_IMAGE" bunx drizzle-kit migrate
+```
+
+Then deploy the Stack. Redis, Mosquitto, and OSRM start alongside the separated API, worker, MQTT-ingest, and scheduler services. Traefik routes `api.example.com` to healthy API replicas.
 
 ## 8. Connect GitHub Actions to Dokploy CD
 

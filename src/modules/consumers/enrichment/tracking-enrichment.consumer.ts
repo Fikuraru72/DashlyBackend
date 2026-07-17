@@ -109,9 +109,6 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
     const { eventId, participantId, lat, lng } = event;
     const capturedAtMs = new Date(event.capturedAt).getTime();
 
-    // ── 0. Register event for ranking flush ───────────────────────
-    this.rankingEngine.registerActiveEvent(eventId);
-
     // ── 1. Read previous state (with single-flight DB fallback) ──
     let prevStats = await this.redisService.getParticipantStats(participantId);
 

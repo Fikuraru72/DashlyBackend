@@ -1,17 +1,20 @@
+import { Emitter } from '@socket.io/redis-emitter';
+import { Inject, Logger, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import {
-  WebSocketGateway,
-  WebSocketServer,
-  SubscribeMessage,
-  MessageBody,
   ConnectedSocket,
+  MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
 } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
-import { Inject, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { and, eq } from 'drizzle-orm';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import Redis from 'ioredis';
+import { Server, Socket } from 'socket.io';
 
 import { DB_CONNECTION } from '../../db/database.module';
 import * as schema from '../../db/schema';
@@ -25,28 +28,28 @@ interface AuthenticatedSocket extends Socket {
   cors: { origin: true, methods: ['GET', 'POST'], credentials: true },
   transports: ['websocket', 'polling'],
 })
-export class EventsGateway
-  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
-{
+export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer()
-  server!: Server;
+  server?: Server;
 
   private readonly logger = new Logger(EventsGateway.name);
-  private readonly positionBuffer = new Map<number, Map<number, any>>();
-  private flushInterval: NodeJS.Timeout | null = null;
-  private readonly FLUSH_INTERVAL_MS = 2000;
+  private readonly redis: Redis;
+  private readonly emitter: Emitter;
 
   constructor(
     private readonly jwtService: JwtService,
+    configService: ConfigService,
     @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
-  ) {}
-
-  onModuleInit() {
-    this.flushInterval = setInterval(() => this.flushPositionBuffer(), this.FLUSH_INTERVAL_MS);
+  ) {
+    this.redis = new Redis({
+      host: configService.get<string>('REDIS_HOST') || 'localhost',
+      port: configService.get<number>('REDIS_PORT') || 6379,
+    });
+    this.emitter = new Emitter(this.redis);
   }
 
-  onModuleDestroy() {
-    if (this.flushInterval) clearInterval(this.flushInterval);
+  async onModuleDestroy() {
+    await this.redis.quit();
   }
 
   handleConnection(client: AuthenticatedSocket) {
@@ -126,55 +129,44 @@ export class EventsGateway
   }
 
   broadcastPositionUpdate(eventId: number, payload: any) {
-    const data = { ...payload, lat: Number(payload.lat), lng: Number(payload.lng) };
-    if (!this.positionBuffer.has(eventId)) {
-      this.positionBuffer.set(eventId, new Map());
-    }
-    this.positionBuffer.get(eventId)!.set(data.participantId || data.userId, data);
+    this.emit(eventId, 'position_batch', {
+      eventId,
+      positions: [{ ...payload, lat: Number(payload.lat), lng: Number(payload.lng) }],
+    });
   }
 
-  private flushPositionBuffer() {
-    for (const [eventId, userMap] of this.positionBuffer) {
-      if (userMap.size === 0) continue;
-      const room = `event_${eventId}`;
-      const roomClients = this.server.sockets.adapter.rooms.get(room);
-      if (!roomClients?.size) {
-        userMap.clear();
-        continue;
-      }
-      this.server.to(room).emit('position_batch', {
-        eventId,
-        positions: Array.from(userMap.values()),
-      });
-      userMap.clear();
-    }
+  private emit(eventId: number, event: string, payload: unknown) {
+    this.emitter.to(`event_${eventId}`).emit(event, payload);
   }
 
   broadcastAnomalyDetected(eventId: number, payload: any) {
-    this.server.to(`event_${eventId}`).emit('anomaly_detected', payload);
+    this.emit(eventId, 'anomaly_detected', payload);
   }
   broadcastSyncBatch(eventId: number, userId: number, payload: any[]) {
-    this.server.to(`event_${eventId}`).emit('sync_batch', { userId, eventId, points: payload });
+    this.emit(eventId, 'sync_batch', { userId, eventId, points: payload });
+  }
+  broadcastSosTriggered(eventId: number, payload: any) {
+    this.emit(eventId, 'sos_triggered', payload);
   }
   broadcastSosRecovered(eventId: number, payload: any) {
-    this.server.to(`event_${eventId}`).emit('sos_recovered', payload);
+    this.emit(eventId, 'sos_recovered', payload);
   }
   broadcastAnomaly(eventId: number, payload: any) {
-    this.server.to(`event_${eventId}`).emit('anomaly_detected', payload);
+    this.emit(eventId, 'anomaly_detected', payload);
   }
   broadcastEventStatus(eventId: number, status: string) {
-    this.server.to(`event_${eventId}`).emit('EVENT_STATUS_CHANGED', { status });
+    this.emit(eventId, 'EVENT_STATUS_CHANGED', { status });
   }
   broadcastRankingUpdate(eventId: number, payload: any) {
-    this.server.to(`event_${eventId}`).emit('ranking_update', payload);
+    this.emit(eventId, 'ranking_update', payload);
   }
   broadcastOffRouteAlert(eventId: number, payload: any) {
-    this.server.to(`event_${eventId}`).emit('off_route_alert', payload);
+    this.emit(eventId, 'off_route_alert', payload);
   }
   broadcastUserStopped(eventId: number, payload: any) {
-    this.server.to(`event_${eventId}`).emit('user_stopped', payload);
+    this.emit(eventId, 'user_stopped', payload);
   }
   broadcastParticipantFinished(eventId: number, payload: any) {
-    this.server.to(`event_${eventId}`).emit('participant_finished', payload);
+    this.emit(eventId, 'participant_finished', payload);
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, Inject, OnModuleInit } from '@nestjs/common';
 import { RedisService } from '../../redis/redis.service';
 import { DB_CONNECTION } from '../../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -19,10 +19,9 @@ import * as schema from '../../../db/schema';
  * Periodically flushes the full sorted set to PostgreSQL `rankings` table.
  */
 @Injectable()
-export class RankingEngine implements OnModuleInit, OnModuleDestroy {
+export class RankingEngine implements OnModuleInit {
   private readonly logger = new Logger(RankingEngine.name);
-  private flushTimer: NodeJS.Timeout | null = null;
-  private readonly FLUSH_INTERVAL_MS = 30_000;
+  private readonly flushIntervalMs = 30_000;
 
   // Speed clamping thresholds (hardened)
   private readonly MAX_SPEED_RUNNING = 8; // m/s
@@ -40,12 +39,7 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    this.flushTimer = setInterval(() => this.flushAllRankings(), this.FLUSH_INTERVAL_MS);
-    this.logger.log('Ranking engine started (flush every 30s, HARDENED)');
-  }
-
-  onModuleDestroy() {
-    if (this.flushTimer) clearInterval(this.flushTimer);
+    this.logger.log('Ranking engine started (distributed flush lock enabled)');
   }
 
   /**
@@ -121,6 +115,7 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
 
     // ── 8. Update Redis sorted set ─────────────────────────────
     await this.redisService.updateRankingScore(eventId, participantId, newScore);
+    void this.flushRankingsIfDue(eventId);
 
     // ── 9. Read rank ───────────────────────────────────────────
     const zeroBasedRank = await this.redisService.getRank(eventId, participantId);
@@ -136,20 +131,14 @@ export class RankingEngine implements OnModuleInit, OnModuleDestroy {
   // ═══════════════════════════════════════════════════════════════
   //  PERIODIC DB FLUSH
   // ═══════════════════════════════════════════════════════════════
-
-  private activeEventIds = new Set<number>();
-
-  registerActiveEvent(eventId: number) {
-    this.activeEventIds.add(eventId);
-  }
-
-  private async flushAllRankings(): Promise<void> {
-    for (const eventId of this.activeEventIds) {
-      try {
-        await this.flushRankingsForEvent(eventId);
-      } catch (err) {
-        this.logger.error(`Failed to flush rankings for event ${eventId}`, err);
-      }
+  private async flushRankingsIfDue(eventId: number): Promise<void> {
+    const lockKey = `ranking_flush:${eventId}`;
+    if (!(await this.redisService.acquireLock(lockKey, this.flushIntervalMs))) return;
+    try {
+      await this.flushRankingsForEvent(eventId);
+    } catch (err) {
+      this.logger.error(`Failed to flush rankings for event ${eventId}`, err);
+      await this.redisService.releaseLock(lockKey);
     }
   }
 

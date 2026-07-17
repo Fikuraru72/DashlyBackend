@@ -1,35 +1,33 @@
+x-backend-environment: &backend-environment
+  NODE_ENV: production
+  NODE_OPTIONS: --max-old-space-size=512
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  MQTT_HOST: mosquitto
+  MQTT_PORT: 1883
+  OSRM_ENABLED: 'true'
+  OSRM_URL: http://osrm-bicycle:5000
+  OSRM_PROFILE: bicycle
+
+x-backend-service: &backend-service
+  image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to the GHCR image, for example ghcr.io/owner/dashly-backend:latest}
+  init: true
+  env_file:
+    - .env
+  environment: *backend-environment
+  security_opt:
+    - no-new-privileges:true
+  networks:
+    - dashly-network
+
 services:
   app:
-    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to the GHCR image, for example ghcr.io/owner/dashly-backend:latest}
-    restart: unless-stopped
-    init: true
-    env_file:
-      - .env
-    environment:
-      NODE_ENV: production
-      NODE_OPTIONS: --max-old-space-size=512
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
-      OSRM_ENABLED: 'true'
-      OSRM_URL: http://osrm-bicycle:5000
-      OSRM_PROFILE: bicycle
+    <<: *backend-service
     depends_on:
-      migrate:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-      mosquitto:
-        condition: service_healthy
-      osrm-bicycle:
-        condition: service_healthy
+      - redis
+      - osrm-bicycle
     expose:
       - '3000'
-    mem_limit: 768m
-    cpus: 1.5
-    security_opt:
-      - no-new-privileges:true
     healthcheck:
       test:
         [
@@ -42,25 +40,69 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-    networks:
-      - dashly-network
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
 
-  migrate:
-    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to the GHCR image, for example ghcr.io/owner/dashly-backend:latest}
-    restart: 'no'
-    env_file:
-      - .env
-    command: ['bunx', 'drizzle-kit', 'migrate']
-    mem_limit: 512m
-    cpus: 1.0
-    security_opt:
-      - no-new-privileges:true
-    networks:
-      - dashly-network
+  worker:
+    <<: *backend-service
+    command: ['bun', 'dist/src/process.js', 'worker']
+    depends_on:
+      - redis
+      - osrm-bicycle
+    deploy:
+      replicas: ${WORKER_REPLICAS:-2}
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+
+  ingest:
+    <<: *backend-service
+    command: ['bun', 'dist/src/process.js', 'ingest']
+    depends_on:
+      - redis
+      - mosquitto
+      - osrm-bicycle
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 512M
+
+  scheduler:
+    <<: *backend-service
+    command: ['bun', 'dist/src/process.js', 'scheduler']
+    depends_on:
+      - redis
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
 
   redis:
     image: redis:8.8.0-alpine
-    restart: unless-stopped
     command:
       - redis-server
       - --appendonly
@@ -75,8 +117,6 @@ services:
       - warning
     volumes:
       - redis_data:/data
-    mem_limit: 192m
-    cpus: 0.25
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -85,17 +125,22 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 192M
     networks:
       - dashly-network
 
   osrm-bicycle:
     image: ghcr.io/project-osrm/osrm-backend:v26.7.3-debian
-    restart: unless-stopped
     command: osrm-routed --algorithm mld --threads 2 /data/java.osrm
     volumes:
       - osrm_bicycle_data:/data
-    mem_limit: 2g
-    cpus: 1.5
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -108,18 +153,23 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
     networks:
       - dashly-network
 
   mosquitto:
     image: eclipse-mosquitto:2.0.22
-    restart: unless-stopped
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
-    mem_limit: 96m
-    cpus: 0.25
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -132,12 +182,21 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 96M
     networks:
       - dashly-network
 
 networks:
   dashly-network:
-    driver: bridge
+    driver: overlay
+    attachable: true
 
 volumes:
   redis_data:
