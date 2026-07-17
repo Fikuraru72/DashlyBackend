@@ -447,6 +447,40 @@ Verify in order:
 
 ## 11. Operations
 
+### Monitoring
+
+Use Dokploy's built-in monitoring first; Grafana is unnecessary for the initial production deployment.
+
+Open:
+
+```text
+Dokploy → Monitoring → Setup Monitoring
+```
+
+Recommended starting values:
+
+```text
+Server refresh:       30 seconds
+Container refresh:    30 seconds
+Retention:            7 days
+CPU alert:            85%
+Memory alert:         85%
+Disk alert:           80%
+```
+
+Monitor at minimum:
+
+- VPS CPU, RAM, swap, disk usage, network, and load average.
+- `app` health, restart count, and RAM approaching its 768 MB limit.
+- `osrm-bicycle` restarts and RAM approaching its 2 GB limit.
+- `redis` restarts, memory usage, and `noeviction` errors.
+- `mosquitto` repeated disconnects and broker errors.
+- `/health/sync` availability.
+
+Configure Dokploy notification channels and threshold alerts. Keep the collection interval at 30 seconds unless faster data is operationally necessary; shorter intervals add server load.
+
+Add Grafana Cloud/Alloy later only when the built-in monitoring becomes insufficient—for example, application request latency p95/p99, endpoint error rates, BullMQ queue metrics, searchable centralized logs, business metrics, or longer retention.
+
 ### View logs
 
 Use Dokploy's per-service Logs tab, or:
@@ -513,6 +547,7 @@ OSRM graph can be regenerated from Geofabrik and normally does not require backu
 - Dokploy Compose: <https://docs.dokploy.com/docs/core/docker-compose>
 - Dokploy production guidance: <https://docs.dokploy.com/docs/core/applications/going-production>
 - Dokploy Compose API: <https://docs.dokploy.com/docs/api/reference-compose>
+- Dokploy monitoring: <https://docs.dokploy.com/docs/core/monitoring>
 - Docker on RHEL: <https://docs.docker.com/engine/install/rhel/>
 - Supabase connections: <https://supabase.com/docs/guides/database/connecting-to-postgres>
 - OSRM releases/images: <https://github.com/Project-OSRM/osrm-backend/releases>
