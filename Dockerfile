@@ -1,14 +1,25 @@
-FROM oven/bun:1.3.9-slim
+# syntax=docker/dockerfile:1
+
+FROM ghcr.io/voidzero-dev/vite-plus:0.2.4 AS build
 
 WORKDIR /app
+COPY --chown=vp:vp package.json pnpm-lock.yaml ./
+RUN vp install --frozen-lockfile
+COPY --chown=vp:vp . .
+RUN vp build
 
-COPY package.json pnpm-lock.yaml ./
-RUN bun install
+FROM oven/bun:1.3.14-slim AS runtime
 
-COPY . .
-RUN bun run build
-
+WORKDIR /app
 ENV NODE_ENV=production
+
+# Keep the toolchain dependencies because the same image runs Drizzle migrations.
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/drizzle.config.ts /app/package.json ./
+
+USER bun
 EXPOSE 3000
 
-CMD ["bun", "run", "start:prod"]
+CMD ["bun", "dist/src/main.js"]

@@ -1,29 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run as root: sudo scripts/prod-bootstrap.sh"
+  exit 1
+fi
+
 if [ ! -f /etc/rocky-release ]; then
   echo "Rocky Linux required"
   exit 1
 fi
 
-sudo dnf install -y dnf-plugins-core ca-certificates curl git firewalld policycoreutils-python-utils
-sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin caddy
-sudo systemctl enable --now docker caddy firewalld
+dnf update -y
+dnf install -y ca-certificates curl git firewalld policycoreutils-python-utils tar
+systemctl enable --now firewalld
 
-if ! swapon --show | grep -q /swapfile; then
-  sudo fallocate -l 4G /swapfile
-  sudo chmod 600 /swapfile
-  sudo mkswap /swapfile
-  sudo swapon /swapfile
-  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+# Dokploy owns ports 80/443 through Traefik. Port 3000 is temporary for panel setup.
+firewall-cmd --permanent --add-service=ssh
+firewall-cmd --permanent --add-service=http
+firewall-cmd --permanent --add-service=https
+firewall-cmd --permanent --add-port=3000/tcp
+firewall-cmd --reload
+
+if ! swapon --show --noheadings | grep -q .; then
+  fallocate -l 8G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >>/etc/fstab
 fi
 
-sudo firewall-cmd --permanent --add-service=ssh
-sudo firewall-cmd --permanent --add-service=http
-sudo firewall-cmd --permanent --add-service=https
-sudo firewall-cmd --permanent --add-port=1883/tcp
-sudo firewall-cmd --reload
-sudo setsebool -P httpd_can_network_connect 1
+cat >/etc/sysctl.d/99-dashly.conf <<'EOF'
+vm.swappiness=10
+fs.inotify.max_user_watches=524288
+net.core.somaxconn=4096
+EOF
+sysctl --system >/dev/null
 
-echo "OK. Next: clone repo, create .env, run scripts/prod-deploy.sh"
+echo "Rocky Linux prepared. Install Dokploy next:"
+echo "curl -sSL https://dokploy.com/install.sh | DOKPLOY_VERSION=latest sh"

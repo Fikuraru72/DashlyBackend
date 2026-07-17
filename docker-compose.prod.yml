@@ -1,24 +1,57 @@
 services:
   app:
-    build:
-      context: .
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to the GHCR image, for example ghcr.io/owner/dashly-backend:latest}
     restart: unless-stopped
     init: true
-    env_file: .env
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=512
       REDIS_HOST: redis
       REDIS_PORT: 6379
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
-    ports:
-      - '127.0.0.1:3000:3000'
+      OSRM_ENABLED: 'true'
+      OSRM_URL: http://osrm-bicycle:5000
+      OSRM_PROFILE: bicycle
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       mosquitto:
         condition: service_healthy
+      osrm-bicycle:
+        condition: service_healthy
+    expose:
+      - '3000'
     mem_limit: 768m
+    cpus: 1.5
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/sync').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - dashly-network
+
+  migrate:
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to the GHCR image, for example ghcr.io/owner/dashly-backend:latest}
+    restart: 'no'
+    env_file:
+      - .env
+    command: ['bunx', 'drizzle-kit', 'migrate']
+    mem_limit: 512m
     cpus: 1.0
     security_opt:
       - no-new-privileges:true
@@ -26,7 +59,7 @@ services:
       - dashly-network
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.8.0-alpine
     restart: unless-stopped
     command:
       - redis-server
@@ -42,18 +75,41 @@ services:
       - warning
     volumes:
       - redis_data:/data
-    mem_limit: 160m
-    cpus: 0.5
+    mem_limit: 192m
+    cpus: 0.25
     security_opt:
       - no-new-privileges:true
-    networks:
-      - dashly-network
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 5s
+    networks:
+      - dashly-network
+
+  osrm-bicycle:
+    image: ghcr.io/project-osrm/osrm-backend:v26.7.3-debian
+    restart: unless-stopped
+    command: osrm-routed --algorithm mld --threads 2 /data/java.osrm
+    volumes:
+      - osrm_bicycle_data:/data
+    mem_limit: 2g
+    cpus: 1.5
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/5000; printf \"GET /route/v1/bicycle/106.827,-6.175;106.829,-6.177?overview=false HTTP/1.0\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - dashly-network
 
   mosquitto:
     image: eclipse-mosquitto:2.0.22
@@ -62,12 +118,10 @@ services:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
-    mem_limit: 64m
+    mem_limit: 96m
     cpus: 0.25
     security_opt:
       - no-new-privileges:true
-    networks:
-      - dashly-network
     healthcheck:
       test:
         [
@@ -78,6 +132,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    networks:
+      - dashly-network
 
 networks:
   dashly-network:
@@ -85,5 +141,7 @@ networks:
 
 volumes:
   redis_data:
+  osrm_bicycle_data:
+    name: dashly-osrm-bicycle
   mosquitto_data:
   mosquitto_log:
