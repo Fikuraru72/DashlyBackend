@@ -71,6 +71,23 @@ export class EventsService {
     });
   }
 
+  async getEventPathHistory(eventId: number) {
+    const logs = await this.db
+      .select({
+        userId: schema.locationLogs.userId,
+        latitude: schema.locationLogs.latitude,
+        longitude: schema.locationLogs.longitude,
+      })
+      .from(schema.locationLogs)
+      .where(eq(schema.locationLogs.eventId, eventId))
+      .orderBy(schema.locationLogs.capturedAt);
+
+    return logs.reduce<Record<number, number[][]>>((history, log) => {
+      (history[log.userId] ??= []).push([log.longitude, log.latitude]);
+      return history;
+    }, {});
+  }
+
   async createEvent(user: any, dto: CreateEventDto) {
     const category = (dto.category as 'RUNNING' | 'CYCLING') || 'RUNNING';
     const normalizedRoute = dto.routeGeojson
@@ -510,6 +527,22 @@ export class EventsService {
       ...(participantState ? { participantState } : {}),
     });
     return { updatedEvent, bibNumber };
+  }
+
+  async getPublicParticipants(eventId: number) {
+    const participants = await this.db
+      .select({
+        id: schema.users.id,
+        name: schema.users.name,
+        joinedAt: schema.eventParticipants.joinedAt,
+        bibNumber: schema.eventParticipants.bibNumber,
+        state: schema.eventParticipants.participantState,
+      })
+      .from(schema.eventParticipants)
+      .innerJoin(schema.users, eq(schema.eventParticipants.userId, schema.users.id))
+      .where(eq(schema.eventParticipants.eventId, eventId));
+
+    return { success: true, data: participants };
   }
 
   async joinEvent(user: any, eventId: number) {

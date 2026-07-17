@@ -102,9 +102,7 @@ export class OsrmService {
     }
 
     try {
-      const coordinatePath = points
-        .map((p) => `${p.lng},${p.lat}`)
-        .join(';');
+      const coordinatePath = points.map((p) => `${p.lng},${p.lat}`).join(';');
 
       // Timestamps help OSRM weight the HMM transitions by speed
       const timestamps = points.map((p) => Math.round(p.timestamp / 1000));
@@ -151,9 +149,7 @@ export class OsrmService {
 
       return null;
     } catch (error) {
-      this.logger.debug(
-        `OSRM Match failed (non-fatal): ${(error as Error).message}`,
-      );
+      this.logger.debug(`OSRM Match failed (non-fatal): ${(error as Error).message}`);
       return null;
     }
   }

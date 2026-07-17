@@ -91,7 +91,11 @@ export class WsPublisherConsumer implements OnModuleInit, OnModuleDestroy {
 
       case 'SYNC':
         this.gateway.broadcastSyncBatch(eventId, event.userId, [
-          { lat: event.intelligence?.snappedLat ?? event.lat, lng: event.intelligence?.snappedLng ?? event.lng, speed: event.speedFromClient },
+          {
+            lat: event.intelligence?.snappedLat ?? event.lat,
+            lng: event.intelligence?.snappedLng ?? event.lng,
+            speed: event.speedFromClient,
+          },
         ]);
         break;
 

@@ -309,7 +309,6 @@ async function seed() {
       console.log('Location logs already exist, skipping...');
     }
 
-
     console.log('Seeding completed successfully! 🚀');
   } catch (error) {
     console.error('Seeding failed:', error);

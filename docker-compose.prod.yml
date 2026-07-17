@@ -1,52 +1,83 @@
 services:
   app:
-    build: .
-    container_name: dashly_backend
-    restart: always
-    env_file:
-      - .env
+    build:
+      context: .
+    restart: unless-stopped
+    init: true
+    env_file: .env
     environment:
       NODE_ENV: production
-    volumes:
-      - ./.env:/app/.env:ro
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
     ports:
       - '127.0.0.1:3000:3000'
     depends_on:
-      - redis
-      - mosquitto
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
     mem_limit: 768m
+    cpus: 1.0
+    security_opt:
+      - no-new-privileges:true
     networks:
       - dashly-network
 
   redis:
-    image: redis:7-alpine
-    container_name: dashly_redis
-    restart: always
-    command: redis-server --save 60 1 --loglevel warning --maxmemory 128mb --maxmemory-policy allkeys-lru
-    ports:
-      - '127.0.0.1:6379:6379'
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - noeviction
+      - --loglevel
+      - warning
     volumes:
       - redis_data:/data
     mem_limit: 160m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
     networks:
       - dashly-network
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
-      timeout: 5s
+      timeout: 3s
       retries: 5
+      start_period: 5s
 
   mosquitto:
-    image: eclipse-mosquitto:latest
-    container_name: dashly_mosquitto
-    restart: always
-    ports:
-      - '127.0.0.1:1883:1883'
+    image: eclipse-mosquitto:2.0.22
+    restart: unless-stopped
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
     mem_limit: 64m
+    cpus: 0.25
+    security_opt:
+      - no-new-privileges:true
     networks:
       - dashly-network
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'mosquitto_sub -h 127.0.0.1 -t $$SYS/broker/version -C 1 -W 3 >/dev/null 2>&1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 networks:
   dashly-network:
@@ -54,3 +85,5 @@ networks:
 
 volumes:
   redis_data:
+  mosquitto_data:
+  mosquitto_log:
