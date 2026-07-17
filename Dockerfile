@@ -6,7 +6,7 @@ WORKDIR /app
 COPY --chown=vp:vp package.json pnpm-lock.yaml ./
 RUN vp install --frozen-lockfile
 COPY --chown=vp:vp . .
-RUN vp build
+RUN vp run build
 
 FROM oven/bun:1.3.14-slim AS runtime
 

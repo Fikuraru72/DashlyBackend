@@ -189,7 +189,7 @@ Every pull request to `master` runs:
 ```text
 vp install --frozen-lockfile
 vp check
-vp build
+vp run build
 vp test
 ```
 
