@@ -1,0 +1,1184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Sequential production deployment guide for Dashly on Rocky Linux, Dokploy, Supabase, GHCR, OSRM, and Vercel."
+    />
+    <title>Dashly · Production Deployment Field Manual</title>
+    <style>
+      :root {
+        --paper: #f5f0e6;
+        --ink: #24231f;
+        --muted: #6d685e;
+        --rule: #cbc2b2;
+        --red: #a43b2b;
+        --green: #315c46;
+        --code: #1f2824;
+        --codeink: #e9efe6;
+        --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+        --sans: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
+        --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--serif);
+        font-size: 18px;
+        line-height: 1.62;
+        text-rendering: optimizeLegibility;
+      }
+      body:before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.23;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
+      }
+      a {
+        color: var(--red);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+      }
+      a:hover {
+        color: #75271c;
+      }
+      .shell {
+        max-width: 1460px;
+        margin: auto;
+        padding: 0 clamp(18px, 4vw, 72px) 100px;
+      }
+      .hero {
+        padding: clamp(72px, 11vw, 160px) 0 64px;
+        border-bottom: 3px double var(--ink);
+        max-width: 1120px;
+      }
+      .eyebrow,
+      .chapter-kicker,
+      .toc-title {
+        font: 700 12px/1.2 var(--sans);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--red);
+      }
+      h1 {
+        font-size: clamp(60px, 10vw, 148px);
+        line-height: 0.82;
+        letter-spacing: -0.065em;
+        font-weight: 500;
+        margin: 0.18em 0 0.26em;
+        max-width: 1050px;
+      }
+      .deck {
+        font-size: clamp(22px, 3vw, 36px);
+        line-height: 1.2;
+        max-width: 850px;
+        margin: 0;
+        color: #48453f;
+      }
+      .hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 24px;
+        margin-top: 38px;
+        font: 600 12px/1 var(--sans);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .hero-meta span:before {
+        content: '◆';
+        font-size: 7px;
+        color: var(--red);
+        margin-right: 9px;
+      }
+      .orientation {
+        max-width: 900px;
+        border-left: 5px solid var(--red);
+        padding: 8px 0 8px 24px;
+        margin: 50px 0 70px;
+        font-size: 21px;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 780px) minmax(220px, 300px);
+        gap: clamp(50px, 8vw, 120px);
+        align-items: start;
+      }
+      .content {
+        min-width: 0;
+      }
+      .toc {
+        position: sticky;
+        top: 24px;
+        border-top: 2px solid var(--ink);
+        border-bottom: 1px solid var(--ink);
+        padding: 20px 0 22px;
+        font-family: var(--sans);
+      }
+      .toc ol {
+        list-style: none;
+        margin: 16px 0 20px;
+        padding: 0;
+      }
+      .toc li {
+        border-top: 1px solid color-mix(in srgb, var(--rule), transparent 35%);
+      }
+      .toc a {
+        display: flex;
+        gap: 12px;
+        padding: 8px 2px;
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 13px;
+      }
+      .toc a:hover {
+        color: var(--red);
+        padding-left: 4px;
+      }
+      .toc span {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      .print-link {
+        border: 1px solid var(--ink);
+        justify-content: center !important;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        margin-top: 14px;
+      }
+      .chapter-kicker {
+        margin-top: 100px;
+        border-top: 1px solid var(--ink);
+        padding-top: 18px;
+      }
+      h2 {
+        font-size: clamp(36px, 5vw, 64px);
+        line-height: 0.98;
+        letter-spacing: -0.038em;
+        font-weight: 500;
+        margin: 0.18em 0 0.6em;
+        scroll-margin-top: 30px;
+      }
+      h3 {
+        font: 650 clamp(20px, 2.5vw, 28px)/1.2 var(--sans);
+        letter-spacing: -0.025em;
+        margin: 2.2em 0 0.55em;
+      }
+      p {
+        margin: 0.8em 0 1.25em;
+      }
+      strong {
+        font-weight: 700;
+      }
+      ul,
+      ol {
+        padding-left: 1.35em;
+      }
+      li {
+        margin: 0.38em 0;
+      }
+      blockquote {
+        margin: 2em 0;
+        border-left: 3px solid var(--red);
+        padding-left: 22px;
+        color: var(--muted);
+      }
+      pre {
+        position: relative;
+        background: var(--code);
+        color: var(--codeink);
+        padding: 22px 24px;
+        overflow: auto;
+        border-radius: 2px;
+        margin: 1.5em 0 2em;
+        box-shadow: 6px 6px 0 #c9bfad;
+        font: 14px/1.6 var(--mono);
+        tab-size: 2;
+      }
+      pre:before {
+        content: 'COMMAND / CONFIG';
+        display: block;
+        color: #9ab6a4;
+        font: 700 10px/1 var(--sans);
+        letter-spacing: 0.14em;
+        margin-bottom: 14px;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.82em;
+        background: #e8dfcf;
+        padding: 0.12em 0.32em;
+        border-radius: 2px;
+      }
+      pre code {
+        font-size: inherit;
+        background: transparent;
+        padding: 0;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 1.5em 0 2.5em;
+        font-family: var(--sans);
+        font-size: 14px;
+      }
+      th {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        text-align: left;
+        border-bottom: 2px solid var(--ink);
+        padding: 9px 12px;
+      }
+      td {
+        border-bottom: 1px solid var(--rule);
+        padding: 11px 12px;
+      }
+      tr:hover td {
+        background: #ede5d7;
+      }
+      input[type='checkbox'] {
+        accent-color: var(--green);
+      }
+      hr {
+        border: 0;
+        border-top: 1px solid var(--rule);
+        margin: 4em 0;
+      }
+      .content > p:first-of-type + pre {
+        font-size: 15px;
+      }
+      .content
+        h2:not([id^='1-']):not([id^='2-']):not([id^='3-']):not([id^='4-']):not([id^='5-']):not(
+          [id^='6-']
+        ):not([id^='7-']):not([id^='8-']):not([id^='9-']):not([id^='10-']):not([id^='11-']) {
+        margin-top: 2em;
+        border-top: 1px solid var(--rule);
+        padding-top: 0.7em;
+      }
+      .back-top {
+        position: fixed;
+        right: 24px;
+        bottom: 22px;
+        width: 42px;
+        height: 42px;
+        border: 1px solid var(--ink);
+        background: var(--paper);
+        color: var(--ink);
+        display: grid;
+        place-items: center;
+        text-decoration: none;
+        font: 16px var(--sans);
+      }
+      @media (max-width: 900px) {
+        body {
+          font-size: 17px;
+        }
+        .layout {
+          display: block;
+        }
+        .toc {
+          position: relative;
+          top: auto;
+          margin-bottom: 70px;
+        }
+        .toc ol {
+          columns: 2;
+        }
+        .hero {
+          padding-top: 70px;
+        }
+        .chapter-kicker {
+          margin-top: 78px;
+        }
+      }
+      @media (max-width: 560px) {
+        .shell {
+          padding-inline: 18px;
+        }
+        .toc ol {
+          columns: 1;
+        }
+        h1 {
+          font-size: 58px;
+        }
+        .deck {
+          font-size: 22px;
+        }
+        pre {
+          margin-left: -8px;
+          margin-right: -8px;
+          padding: 18px 15px;
+          font-size: 12px;
+          box-shadow: 4px 4px 0 #c9bfad;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+        }
+        .hero-meta {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+        }
+        .orientation {
+          font-size: 18px;
+        }
+      }
+      @media print {
+        body {
+          background: white;
+          font-size: 11pt;
+        }
+        body:before,
+        .toc,
+        .back-top {
+          display: none;
+        }
+        .shell {
+          max-width: none;
+          padding: 0;
+        }
+        .layout {
+          display: block;
+        }
+        .content {
+          max-width: none;
+        }
+        .hero {
+          padding: 0 0 24px;
+        }
+        .hero h1 {
+          font-size: 62pt;
+        }
+        .chapter-kicker {
+          margin-top: 34px;
+          break-after: avoid;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+        pre,
+        table {
+          break-inside: avoid;
+          box-shadow: none;
+        }
+        a {
+          color: inherit;
+          text-decoration: none;
+        }
+        a[href^='http']:after {
+          content: ' (' attr(href) ')';
+          font-size: 8pt;
+        }
+        .orientation {
+          margin: 25px 0;
+        }
+        .hero-meta {
+          margin-top: 20px;
+        }
+        @page {
+          margin: 18mm 20mm;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero" id="top">
+        <p class="eyebrow">Production field manual · Dashly</p>
+        <h1>Deploy without guessing.</h1>
+        <p class="deck">
+          A sequential, production-ready path from a fresh Rocky Linux VPS to Dokploy, Supabase,
+          GHCR, OSRM bicycle routing, and Vercel.
+        </p>
+        <div class="hero-meta">
+          <span>6 vCPU</span><span>6 GB RAM</span><span>40+ GB SSD</span
+          ><span>Rocky Linux 9/10</span>
+        </div>
+      </header>
+      <section class="orientation" aria-label="How to use this guide">
+        <p>
+          <strong>Follow in order.</strong> Each numbered chapter assumes the previous chapter is
+          complete. Do not expose port 1883, do not install Caddy or Nginx, and do not rebuild OSRM
+          during ordinary deploys.
+        </p>
+      </section>
+      <div class="layout">
+        <main class="content">
+          <p>Production topology:</p>
+          <pre class="text"><code>Vercel (DashlyDashboard)
+       │ HTTPS / Socket.IO
+       ▼
+Dokploy + Traefik on Rocky Linux
+       │
+       └── DashlyBackend Compose
+           ├── NestJS backend (GHCR image)
+           ├── Redis
+           ├── Mosquitto
+           └── OSRM MLD, bicycle profile, Java OSM extract
+
+DashlyBackend ── TLS ── Supabase PostgreSQL</code></pre>
+          <p>
+            Target server: Rocky Linux 9/10, 6 vCPU, 6 GB RAM, at least 40 GB SSD. Frontend stays on
+            Vercel; PostgreSQL stays on Supabase.
+          </p>
+          <h2 id="versions-pinned-in-this-repository">Versions pinned in this repository</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Version</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Bun runtime</td>
+                <td><code>1.3.14</code></td>
+              </tr>
+              <tr>
+                <td>Vite+ build</td>
+                <td><code>0.2.4</code></td>
+              </tr>
+              <tr>
+                <td>OSRM</td>
+                <td><code>v26.7.3-debian</code> from official GHCR</td>
+              </tr>
+              <tr>
+                <td>Redis</td>
+                <td><code>8.8.0-alpine</code></td>
+              </tr>
+              <tr>
+                <td>Mosquitto</td>
+                <td><code>2.0.22</code></td>
+              </tr>
+              <tr>
+                <td>Dokploy</td>
+                <td>latest stable at installation time</td>
+              </tr>
+              <tr>
+                <td>Java OSM data</td>
+                <td>Geofabrik <code>java-latest.osm.pbf</code></td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Do not blindly replace pinned images with <code>latest</code>. Upgrade deliberately,
+            rebuild OSRM after changing its image version, then run the smoke tests below.
+          </p>
+          <h2 id="resource-allocation">Resource allocation</h2>
+          <p>Runtime limits in <code>docker-compose.prod.yml</code>:</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th style="text-align: right">CPU limit</th>
+                <th style="text-align: right">RAM limit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Backend</td>
+                <td style="text-align: right">1.5</td>
+                <td style="text-align: right">768 MB</td>
+              </tr>
+              <tr>
+                <td>OSRM</td>
+                <td style="text-align: right">1.5, 2 threads</td>
+                <td style="text-align: right">2 GB</td>
+              </tr>
+              <tr>
+                <td>Redis</td>
+                <td style="text-align: right">0.25</td>
+                <td style="text-align: right">192 MB</td>
+              </tr>
+              <tr>
+                <td>Mosquitto</td>
+                <td style="text-align: right">0.25</td>
+                <td style="text-align: right">96 MB</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Dokploy, Traefik, Docker, Rocky Linux, and filesystem cache use the remaining resources.
+            OSRM preparation is exceptional: it may use up to 4 CPUs, 5 GB RAM, and swap, but it
+            runs only when creating/updating the map graph.
+          </p>
+          <div class="chapter-kicker">Phase 01 · Before touching the server</div>
+          <h2 id="1-prepare-dns-and-accounts">1. Prepare DNS and accounts</h2>
+          <p>Create these DNS records before deployment:</p>
+          <pre class="text"><code>api.example.com      A/AAAA  -&gt; VPS
+panel.example.com    A/AAAA  -&gt; VPS
+app.example.com      CNAME   -&gt; Vercel target</code></pre>
+          <p>Create or have access to:</p>
+          <ul>
+            <li>GitHub repository for <code>DashlyBackend</code>.</li>
+            <li>GitHub Container Registry (GHCR), enabled automatically by the workflow.</li>
+            <li>Supabase project.</li>
+            <li>Vercel project for <code>DashlyDashboard</code>.</li>
+            <li>Rocky Linux root SSH access.</li>
+          </ul>
+          <p>
+            Use a private backend repository if desired. Its GHCR package will also be private
+            initially; Dokploy then needs GHCR credentials.
+          </p>
+          <div class="chapter-kicker">Phase 02 · Host foundation</div>
+          <h2 id="2-secure-a-fresh-rocky-linux-server">2. Secure a fresh Rocky Linux server</h2>
+          <p>Log in as root:</p>
+          <div class="sourceCode" id="cb3">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ssh</span> root@VPS_IP</span></code></pre>
+          </div>
+          <p>Create a non-root administrator before disabling password/root access:</p>
+          <div class="sourceCode" id="cb4">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">useradd</span> <span class="at">-m</span> <span class="at">-G</span> wheel deploy</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">passwd</span> deploy</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> /home/deploy/.ssh</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="fu">cp</span> ~/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="fu">chown</span> <span class="at">-R</span> deploy:deploy /home/deploy/.ssh</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="fu">chmod</span> 700 /home/deploy/.ssh</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="fu">chmod</span> 600 /home/deploy/.ssh/authorized_keys</span></code></pre>
+          </div>
+          <p>Test a second SSH session as <code>deploy</code> before continuing.</p>
+          <p>Clone the backend temporarily to run the checked-in bootstrap:</p>
+          <div class="sourceCode" id="cb5">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">dnf</span> install <span class="at">-y</span> git</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">mkdir</span> <span class="at">-p</span> /opt/dashly</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /opt/dashly</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone https://github.com/Fikuraru72/DashlyBackend.git</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> DashlyBackend</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="fu">chmod</span> +x scripts/<span class="pp">*</span>.sh</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> scripts/prod-bootstrap.sh</span></code></pre>
+          </div>
+          <p>The bootstrap:</p>
+          <ul>
+            <li>Updates Rocky packages.</li>
+            <li>Installs basic tools and enables <code>firewalld</code>.</li>
+            <li>Opens SSH, HTTP, HTTPS, and temporary Dokploy port <code>3000</code>.</li>
+            <li>
+              Creates 8 GB swap if no swap exists. This protects the 6 GB VPS during OSRM
+              preparation/build spikes.
+            </li>
+            <li>Keeps SELinux enabled.</li>
+          </ul>
+          <p>Optional SSH hardening after key login is proven:</p>
+          <div class="sourceCode" id="cb6">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span> <span class="op">&gt;</span>/etc/ssh/sshd_config.d/99-hardening.conf <span class="op">&lt;&lt;&#39;EOF&#39;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="st">PermitRootLogin prohibit-password</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="st">PasswordAuthentication no</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="st">KbdInteractiveAuthentication no</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="op">EOF</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="ex">sshd</span> <span class="at">-t</span> <span class="kw">&amp;&amp;</span> <span class="ex">systemctl</span> reload sshd</span></code></pre>
+          </div>
+          <div class="chapter-kicker">Phase 03 · Control plane</div>
+          <h2 id="3-install-dokploy">3. Install Dokploy</h2>
+          <p>Ensure ports are free:</p>
+          <div class="sourceCode" id="cb7">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">ss</span> <span class="at">-lntp</span> <span class="kw">|</span> <span class="fu">grep</span> <span class="at">-E</span> <span class="st">&#39;:(80|443|3000)\b&#39;</span> <span class="kw">||</span> <span class="fu">true</span></span></code></pre>
+          </div>
+          <p>Install the latest stable Dokploy:</p>
+          <div class="sourceCode" id="cb8">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> scripts/dokploy-install.sh</span></code></pre>
+          </div>
+          <p>
+            The script downloads the official installer first and stops on HTTP failure. Equivalent
+            official command:
+          </p>
+          <div class="sourceCode" id="cb9">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">-sSL</span> https://dokploy.com/install.sh <span class="kw">|</span> <span class="va">DOKPLOY_VERSION</span><span class="op">=</span>latest <span class="fu">sh</span></span></code></pre>
+          </div>
+          <p>Open:</p>
+          <pre class="text"><code>http://VPS_IP:3000</code></pre>
+          <p>Create the first Dokploy administrator immediately.</p>
+          <h3 id="configure-the-dokploy-panel-domain">Configure the Dokploy panel domain</h3>
+          <p>In Dokploy, configure <code>panel.example.com</code> with HTTPS. Verify:</p>
+          <div class="sourceCode" id="cb11">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">-I</span> https://panel.example.com</span></code></pre>
+          </div>
+          <p>Only after HTTPS works, remove direct <code>IP:3000</code> access:</p>
+          <div class="sourceCode" id="cb12">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> scripts/dokploy-lockdown.sh</span></code></pre>
+          </div>
+          <p>Do not install Caddy or Nginx: Dokploy already owns ports 80/443 through Traefik.</p>
+          <div class="chapter-kicker">Phase 04 · Database boundary</div>
+          <h2 id="4-configure-supabase">4. Configure Supabase</h2>
+          <p>In Supabase <strong>Connect</strong>, copy:</p>
+          <ol type="1">
+            <li>
+              <strong>Session pooler URI</strong>, suitable for the persistent NestJS server on an
+              IPv4 VPS.
+            </li>
+            <li>
+              <strong>Direct URI</strong> if the VPS has IPv6 or Supabase dedicated IPv4. Direct
+              connections are preferred for migrations/administrative work.
+            </li>
+          </ol>
+          <p>
+            For this Compose setup, use the session pooler URI for <code>DATABASE_URL</code> unless
+            direct connectivity is confirmed:
+          </p>
+          <pre
+            class="env"
+          ><code>DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres?sslmode=require</code></pre>
+          <p>
+            Do not use the browser/API keys as database credentials. URL-encode special characters
+            in the database password.
+          </p>
+          <p>
+            Before first production deployment, test the duplicate-BIB migration against a
+            production snapshot. Migration
+            <code>0002_event_participant_bib_unique.sql</code> intentionally aborts if duplicates
+            exist.
+          </p>
+          <div class="chapter-kicker">Phase 05 · Artifact pipeline</div>
+          <h2 id="5-build-and-publish-the-backend-to-ghcr">
+            5. Build and publish the backend to GHCR
+          </h2>
+          <p>Workflow: <code>.github/workflows/backend-image.yml</code>.</p>
+          <p>Every pull request to <code>master</code> runs:</p>
+          <pre class="text"><code>vp install --frozen-lockfile
+vp check
+vp run build
+vp test</code></pre>
+          <p>Every push to <code>master</code> additionally builds and publishes:</p>
+          <pre class="text"><code>ghcr.io/&lt;github-owner&gt;/dashly-backend:latest
+ghcr.io/&lt;github-owner&gt;/dashly-backend:sha-&lt;commit&gt;</code></pre>
+          <p>Git tags such as <code>v1.0.0</code> also produce the matching image tag.</p>
+          <p>
+            The workflow uses currently researched stable action releases rather than floating
+            majors:
+          </p>
+          <pre class="text"><code>actions/checkout@v7.0.0
+voidzero-dev/setup-vp@v1.9.0
+docker/setup-buildx-action@v4.2.0
+docker/login-action@v4.4.0
+docker/metadata-action@v6.2.0
+docker/build-push-action@v7.3.0</code></pre>
+          <p>Push once and verify under GitHub <strong>Packages</strong>:</p>
+          <div class="sourceCode" id="cb17">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> push origin master</span></code></pre>
+          </div>
+          <p>
+            If the repository/package is private, create a GitHub classic PAT with
+            <code>read:packages</code> for Dokploy. The workflow itself publishes with
+            <code>GITHUB_TOKEN</code>; no publishing PAT is required.
+          </p>
+          <div class="chapter-kicker">Phase 06 · One-time heavy operation</div>
+          <h2 id="6-prepare-the-java-bicycle-osrm-graph">6. Prepare the Java bicycle OSRM graph</h2>
+          <p>
+            The Geofabrik Java extract is roughly 850 MB and changes daily. Preparation creates
+            multiple graph files and needs substantial temporary disk/RAM. Keep at least 20 GB free
+            before starting:
+          </p>
+          <div class="sourceCode" id="cb18">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="fu">df</span> <span class="at">-h</span> /</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="fu">free</span> <span class="at">-h</span></span></code></pre>
+          </div>
+          <p>Run once on the VPS:</p>
+          <div class="sourceCode" id="cb19">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /opt/dashly/DashlyBackend</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> <span class="at">-u</span> deploy scripts/osrm-prepare.sh</span></code></pre>
+          </div>
+          <p>It will:</p>
+          <ol type="1">
+            <li>Pull official <code>ghcr.io/project-osrm/osrm-backend:v26.7.3-debian</code>.</li>
+            <li>Download <code>java-latest.osm.pbf</code> from Geofabrik with resume/retry.</li>
+            <li>Run <code>osrm-extract</code> using <code>/opt/bicycle.lua</code>.</li>
+            <li>Run MLD <code>osrm-partition</code> and <code>osrm-customize</code>.</li>
+            <li>Store the result in named volume <code>dashly-osrm-bicycle</code>.</li>
+            <li>Delete the downloaded PBF after success.</li>
+          </ol>
+          <p>Verify:</p>
+          <div class="sourceCode" id="cb20">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> volume inspect dashly-osrm-bicycle</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> run <span class="at">--rm</span> <span class="at">-v</span> dashly-osrm-bicycle:/data <span class="dt">\</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  ghcr.io/project-osrm/osrm-backend:v26.7.3-debian <span class="dt">\</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  test <span class="at">-f</span> /data/java.osrm</span></code></pre>
+          </div>
+          <p>To update map data later:</p>
+          <div class="sourceCode" id="cb21">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="va">FORCE_OSRM_REBUILD</span><span class="op">=</span>1 <span class="ex">scripts/osrm-prepare.sh</span></span></code></pre>
+          </div>
+          <p>
+            Schedule this manually during a maintenance window. Do not rebuild the graph on every
+            application deployment.
+          </p>
+          <div class="chapter-kicker">Phase 07 · Runtime assembly</div>
+          <h2 id="7-create-the-dokploy-compose-deployment">
+            7. Create the Dokploy Compose deployment
+          </h2>
+          <p>In Dokploy:</p>
+          <ol type="1">
+            <li>Create project <code>Dashly</code>.</li>
+            <li>Create environment <code>Production</code>.</li>
+            <li>Add <strong>Docker Compose</strong> named <code>Dashly Backend</code>.</li>
+            <li>Source: GitHub repository <code>DashlyBackend</code>.</li>
+            <li>Branch: <code>master</code>.</li>
+            <li>Compose path: <code>docker-compose.prod.yml</code>.</li>
+            <li>Compose type: standard Docker Compose, not Stack.</li>
+            <li>
+              Disable repository auto-deploy if GitHub Actions will trigger deployment after
+              publishing the image. This avoids deploying before the GHCR image exists.
+            </li>
+          </ol>
+          <h3 id="environment-variables">Environment variables</h3>
+          <p>Paste into Dokploy's Compose <strong>Environment</strong> tab:</p>
+          <pre class="env"><code>BACKEND_IMAGE=ghcr.io/fikuraru72/dashly-backend:latest
+NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres?sslmode=require
+JWT_SECRET=GENERATE_A_LONG_RANDOM_SECRET
+GOOGLE_CLIENT_ID=
+REDIS_HOST=redis
+REDIS_PORT=6379
+MQTT_HOST=mosquitto
+MQTT_PORT=1883
+OSRM_ENABLED=true
+OSRM_URL=http://osrm-bicycle:5000
+OSRM_PROFILE=bicycle</code></pre>
+          <p>Generate the JWT secret locally:</p>
+          <div class="sourceCode" id="cb23">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="ex">openssl</span> rand <span class="at">-base64</span> 48</span></code></pre>
+          </div>
+          <p>
+            Dokploy writes the environment to <code>.env</code>; the Compose file explicitly uses
+            <code>env_file: .env</code> because Dokploy does not inject those values automatically.
+          </p>
+          <h3 id="ghcr-authentication-for-a-private-image">
+            GHCR authentication for a private image
+          </h3>
+          <p>In Dokploy, add GHCR as a registry:</p>
+          <pre class="text"><code>Registry: ghcr.io
+Username: GitHub username
+Password/token: PAT with read:packages</code></pre>
+          <p>
+            Make the GHCR package public if private registry configuration is unnecessary and public
+            distribution is acceptable.
+          </p>
+          <h3 id="persistent-volumes">Persistent volumes</h3>
+          <p>The Compose file uses named volumes:</p>
+          <pre class="text"><code>dashly-osrm-bicycle   OSRM Java graph
+redis_data             Redis AOF
+mosquitto.conf         Read-only Mosquitto config from the repository
+mosquitto_data         Mosquitto persistence
+mosquitto_log          Mosquitto logs</code></pre>
+          <p>
+            Never delete volumes during normal redeploys. Deleting
+            <code>dashly-osrm-bicycle</code> requires preparing the graph again.
+          </p>
+          <h3 id="mosquitto-config">Mosquitto config</h3>
+          <p>
+            Compose mounts the checked-in <code>mosquitto.conf</code> read-only. Anonymous MQTT is
+            acceptable only while MQTT remains internal to the Compose network. The current
+            production Compose does not publish port 1883. If participant devices must connect
+            directly over the internet, do not expose anonymous 1883; configure authenticated MQTT
+            over TLS on 8883 first.
+          </p>
+          <h3 id="backend-domain">Backend domain</h3>
+          <p>In Compose <strong>Domains</strong>, create:</p>
+          <pre class="text"><code>Host: api.example.com
+Service: app
+Container port: 3000
+Path: /
+HTTPS: enabled
+Certificate: Let&#39;s Encrypt</code></pre>
+          <p>
+            Do not add <code>ports:</code> for the app. Dokploy/Traefik routes to the internal
+            <code>3000</code> port.
+          </p>
+          <p>Deploy. The startup sequence is:</p>
+          <ol type="1">
+            <li>Redis, Mosquitto, and OSRM become healthy.</li>
+            <li>
+              One-shot <code>migrate</code> runs <code>drizzle-kit migrate</code> against Supabase.
+            </li>
+            <li>Backend starts only if migration succeeds.</li>
+            <li>Traefik routes <code>api.example.com</code> to the healthy backend.</li>
+          </ol>
+          <div class="chapter-kicker">Phase 08 · Continuous delivery</div>
+          <h2 id="8-connect-github-actions-to-dokploy-cd">
+            8. Connect GitHub Actions to Dokploy CD
+          </h2>
+          <p>After the first manual deployment:</p>
+          <ol type="1">
+            <li>Dokploy profile → API/CLI → generate API key.</li>
+            <li>Find the Compose ID from the Dokploy URL/API.</li>
+            <li>GitHub repository → Settings → Secrets and variables → Actions.</li>
+            <li>Add secret:</li>
+          </ol>
+          <pre class="text"><code>DOKPLOY_API_KEY=&lt;generated API key&gt;</code></pre>
+          <ol start="5" type="1">
+            <li>Add repository variables:</li>
+          </ol>
+          <pre class="text"><code>DOKPLOY_URL=https://panel.example.com
+DOKPLOY_COMPOSE_ID=&lt;compose id&gt;</code></pre>
+          <p>On every successful <code>master</code> image publish, GitHub Actions calls:</p>
+          <pre class="text"><code>POST /api/compose.redeploy</code></pre>
+          <p>
+            Dokploy then pulls <code>BACKEND_IMAGE</code> and redeploys. If the variables are
+            absent, CI still builds/publishes but skips deployment.
+          </p>
+          <div class="chapter-kicker">Phase 09 · Public application</div>
+          <h2 id="9-deploy-frontend-to-vercel">9. Deploy frontend to Vercel</h2>
+          <p>
+            Import <code>DashlyDashboard</code> into Vercel and select Next.js. Set production
+            environment variables:
+          </p>
+          <pre class="env"><code>NEXT_PUBLIC_API_URL=https://api.example.com
+NEXT_PUBLIC_BACKEND_URL=https://api.example.com</code></pre>
+          <p>
+            Add the frontend custom domain, for example <code>app.example.com</code>, then redeploy.
+            Next.js <code>/api/auth/login</code>, <code>/api/auth/refresh</code>, and
+            <code>/api/auth/logout</code> must remain server route handlers; do not configure the
+            frontend as a static export.
+          </p>
+          <p>
+            Refresh tokens remain in an httpOnly cookie owned by the frontend origin. Browser
+            requests to <code>/api/auth/refresh</code> are same-origin, so
+            <code>SameSite=Lax</code> works even though the backend uses
+            <code>api.example.com</code>.
+          </p>
+          <div class="chapter-kicker">Phase 10 · Prove the system</div>
+          <h2 id="10-verification">10. Verification</h2>
+          <h3 id="backend">Backend</h3>
+          <div class="sourceCode" id="cb31">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">--fail</span> https://api.example.com/health/sync</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">-i</span> <span class="at">-X</span> OPTIONS https://api.example.com/auth/login <span class="dt">\</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;Origin: https://app.example.com&#39;</span> <span class="dt">\</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;Access-Control-Request-Method: POST&#39;</span></span></code></pre>
+          </div>
+          <p>Expected health response: HTTP 200 with database connectivity information.</p>
+          <h3 id="osrm-from-the-compose-network">OSRM from the Compose network</h3>
+          <p>
+            Use Dokploy terminal on the <code>app</code> container or run from the deployment host
+            with the project network:
+          </p>
+          <div class="sourceCode" id="cb32">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="st">&#39;http://osrm-bicycle:5000/route/v1/bicycle/106.827,-6.175;106.829,-6.177?overview=false&#39;</span></span></code></pre>
+          </div>
+          <p>Expected JSON contains <code>"code":"Ok"</code>.</p>
+          <h3 id="containers-and-resources">Containers and resources</h3>
+          <div class="sourceCode" id="cb33">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> ps</span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> stats <span class="at">--no-stream</span></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> service ls</span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="fu">free</span> <span class="at">-h</span></span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="fu">df</span> <span class="at">-h</span></span></code></pre>
+          </div>
+          <p>
+            During normal runtime, OSRM should not consume 1.5 CPUs continuously. The CPU value is a
+            ceiling, not reservation.
+          </p>
+          <h3 id="end-to-end">End-to-end</h3>
+          <p>Verify in order:</p>
+          <ol type="1">
+            <li>Open Vercel frontend.</li>
+            <li>Login.</li>
+            <li>Refresh the browser; session refresh succeeds.</li>
+            <li>Fetch dashboard events.</li>
+            <li>Connect Socket.IO.</li>
+            <li>Join an authorized event room.</li>
+            <li>Create/normalize a bicycle route inside Java.</li>
+            <li>Confirm Redis/MQTT consumers and live positions.</li>
+          </ol>
+          <div class="chapter-kicker">Phase 11 · Keep it healthy</div>
+          <h2 id="11-operations">11. Operations</h2>
+          <h3 id="monitoring">Monitoring</h3>
+          <p>
+            Use Dokploy's built-in monitoring first; Grafana is unnecessary for the initial
+            production deployment.
+          </p>
+          <p>Open:</p>
+          <pre class="text"><code>Dokploy → Monitoring → Setup Monitoring</code></pre>
+          <p>Recommended starting values:</p>
+          <pre class="text"><code>Server refresh:       30 seconds
+Container refresh:    30 seconds
+Retention:            7 days
+CPU alert:            85%
+Memory alert:         85%
+Disk alert:           80%</code></pre>
+          <p>Monitor at minimum:</p>
+          <ul>
+            <li>VPS CPU, RAM, swap, disk usage, network, and load average.</li>
+            <li><code>app</code> health, restart count, and RAM approaching its 768 MB limit.</li>
+            <li><code>osrm-bicycle</code> restarts and RAM approaching its 2 GB limit.</li>
+            <li><code>redis</code> restarts, memory usage, and <code>noeviction</code> errors.</li>
+            <li><code>mosquitto</code> repeated disconnects and broker errors.</li>
+            <li><code>/health/sync</code> availability.</li>
+          </ul>
+          <p>
+            Configure Dokploy notification channels and threshold alerts. Keep the collection
+            interval at 30 seconds unless faster data is operationally necessary; shorter intervals
+            add server load.
+          </p>
+          <p>
+            Add Grafana Cloud/Alloy later only when the built-in monitoring becomes insufficient—for
+            example, application request latency p95/p99, endpoint error rates, BullMQ queue
+            metrics, searchable centralized logs, business metrics, or longer retention.
+          </p>
+          <h3 id="view-logs">View logs</h3>
+          <p>Use Dokploy's per-service Logs tab, or:</p>
+          <div class="sourceCode" id="cb36">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> logs <span class="at">--tail</span> 200 <span class="at">-f</span> <span class="op">&lt;</span>container<span class="op">&gt;</span></span></code></pre>
+          </div>
+          <h3 id="roll-back-backend">Roll back backend</h3>
+          <p>Use an immutable SHA tag published by CI:</p>
+          <pre
+            class="env"
+          ><code>BACKEND_IMAGE=ghcr.io/fikuraru72/dashly-backend:sha-abcdef0</code></pre>
+          <p>
+            Save and redeploy in Dokploy. Avoid rolling back database migrations blindly; verify
+            schema compatibility first.
+          </p>
+          <h3 id="update-dokploy">Update Dokploy</h3>
+          <div class="sourceCode" id="cb38">
+            <pre
+              class="sourceCode bash"
+            ><code class="sourceCode bash"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="at">-sSL</span> https://dokploy.com/install.sh <span class="kw">|</span> <span class="fu">sh</span> <span class="at">-s</span> update</span></code></pre>
+          </div>
+          <p>Read Dokploy release notes before updating production.</p>
+          <h3 id="update-osrm">Update OSRM</h3>
+          <ol type="1">
+            <li>Pin the new official GHCR image in Compose and scripts.</li>
+            <li>Run repository checks.</li>
+            <li>Rebuild the graph with <code>FORCE_OSRM_REBUILD=1</code>.</li>
+            <li>Redeploy and smoke-test routing.</li>
+          </ol>
+          <p>
+            Graph files are version-sensitive; do not assume a graph generated by an older OSRM is
+            compatible with a new binary.
+          </p>
+          <h3 id="backup">Backup</h3>
+          <p>Supabase handles PostgreSQL according to the selected plan. Also back up:</p>
+          <ul>
+            <li>Dokploy configuration.</li>
+            <li>Redis volume if losing queued/replay data is unacceptable.</li>
+            <li>Mosquitto data if persistent sessions matter.</li>
+          </ul>
+          <p>OSRM graph can be regenerated from Geofabrik and normally does not require backup.</p>
+          <h2 id="security-checklist">Security checklist</h2>
+          <ul class="task-list">
+            <li>
+              <label><input type="checkbox" />SSH key authentication works.</label>
+            </li>
+            <li>
+              <label><input type="checkbox" />Password SSH login disabled.</label>
+            </li>
+            <li>
+              <label><input type="checkbox" />SELinux remains enforcing.</label>
+            </li>
+            <li>
+              <label
+                ><input type="checkbox" />Only ports 22, 80, and 443 are public after Dokploy
+                setup.</label
+              >
+            </li>
+            <li>
+              <label
+                ><input type="checkbox" />Dokploy direct port 3000 disabled after panel HTTPS
+                works.</label
+              >
+            </li>
+            <li>
+              <label
+                ><input type="checkbox" />Redis, OSRM, Mosquitto, and backend container ports are
+                not host-published.</label
+              >
+            </li>
+            <li>
+              <label
+                ><input type="checkbox" /><code>JWT_SECRET</code> is random and not
+                committed.</label
+              >
+            </li>
+            <li>
+              <label><input type="checkbox" />Supabase password is not committed.</label>
+            </li>
+            <li>
+              <label
+                ><input type="checkbox" />GHCR token has only <code>read:packages</code> on the
+                VPS/Dokploy side.</label
+              >
+            </li>
+            <li>
+              <label
+                ><input type="checkbox" />GitHub Actions publishing uses scoped
+                <code>GITHUB_TOKEN</code>.</label
+              >
+            </li>
+            <li>
+              <label
+                ><input type="checkbox" />MQTT remains internal or is upgraded to authenticated TLS
+                before public exposure.</label
+              >
+            </li>
+            <li>
+              <label
+                ><input type="checkbox" />Production migration tested on a database snapshot.</label
+              >
+            </li>
+          </ul>
+          <h2 id="authoritative-references">Authoritative references</h2>
+          <ul>
+            <li>
+              Dokploy installation:
+              <a href="https://docs.dokploy.com/docs/core/installation"
+                >https://docs.dokploy.com/docs/core/installation</a
+              >
+            </li>
+            <li>
+              Dokploy Compose:
+              <a href="https://docs.dokploy.com/docs/core/docker-compose"
+                >https://docs.dokploy.com/docs/core/docker-compose</a
+              >
+            </li>
+            <li>
+              Dokploy production guidance:
+              <a href="https://docs.dokploy.com/docs/core/applications/going-production"
+                >https://docs.dokploy.com/docs/core/applications/going-production</a
+              >
+            </li>
+            <li>
+              Dokploy Compose API:
+              <a href="https://docs.dokploy.com/docs/api/reference-compose"
+                >https://docs.dokploy.com/docs/api/reference-compose</a
+              >
+            </li>
+            <li>
+              Dokploy monitoring:
+              <a href="https://docs.dokploy.com/docs/core/monitoring"
+                >https://docs.dokploy.com/docs/core/monitoring</a
+              >
+            </li>
+            <li>
+              Docker on RHEL:
+              <a href="https://docs.docker.com/engine/install/rhel/"
+                >https://docs.docker.com/engine/install/rhel/</a
+              >
+            </li>
+            <li>
+              Supabase connections:
+              <a href="https://supabase.com/docs/guides/database/connecting-to-postgres"
+                >https://supabase.com/docs/guides/database/connecting-to-postgres</a
+              >
+            </li>
+            <li>
+              OSRM releases/images:
+              <a href="https://github.com/Project-OSRM/osrm-backend/releases"
+                >https://github.com/Project-OSRM/osrm-backend/releases</a
+              >
+            </li>
+            <li>
+              Java OSM extract:
+              <a href="https://download.geofabrik.de/asia/indonesia/java.html"
+                >https://download.geofabrik.de/asia/indonesia/java.html</a
+              >
+            </li>
+            <li>
+              Vercel environment variables:
+              <a href="https://vercel.com/docs/environment-variables"
+                >https://vercel.com/docs/environment-variables</a
+              >
+            </li>
+          </ul>
+        </main>
+        <nav class="toc" aria-label="Deployment chapters">
+          <p class="toc-title">Deployment sequence</p>
+          <ol>
+            <li>
+              <a href="#1-prepare-dns-and-accounts"><span>01</span> DNS & accounts</a>
+            </li>
+            <li>
+              <a href="#2-secure-a-fresh-rocky-linux-server"><span>02</span> Rocky Linux</a>
+            </li>
+            <li>
+              <a href="#3-install-dokploy"><span>03</span> Dokploy</a>
+            </li>
+            <li>
+              <a href="#4-configure-supabase"><span>04</span> Supabase</a>
+            </li>
+            <li>
+              <a href="#5-build-and-publish-the-backend-to-ghcr"><span>05</span> GHCR pipeline</a>
+            </li>
+            <li>
+              <a href="#6-prepare-the-java-bicycle-osrm-graph"><span>06</span> OSRM graph</a>
+            </li>
+            <li>
+              <a href="#7-create-the-dokploy-compose-deployment"><span>07</span> Compose</a>
+            </li>
+            <li>
+              <a href="#8-connect-github-actions-to-dokploy-cd"><span>08</span> CD hook</a>
+            </li>
+            <li>
+              <a href="#9-deploy-frontend-to-vercel"><span>09</span> Vercel</a>
+            </li>
+            <li>
+              <a href="#10-verification"><span>10</span> Verification</a>
+            </li>
+            <li>
+              <a href="#11-operations"><span>11</span> Operations</a>
+            </li>
+          </ol>
+          <a
+            class="print-link"
+            href="#"
+            onclick="
+              window.print();
+              return false;
+            "
+            >Print guide</a
+          >
+        </nav>
+      </div>
+    </div>
+    <a class="back-top" href="#top" aria-label="Back to top">↑</a>
+  </body>
+</html>
