@@ -981,6 +981,10 @@ export class EventsService {
       `[Events] Participant (User ${userId}) state changed: ${participant.participantState} → ${newState}`,
     );
 
+    await this.redisService.updateParticipantState(eventId, participant.id, {
+      participantState: newState as any,
+    });
+
     return {
       success: true,
       data: updated,
