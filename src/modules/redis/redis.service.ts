@@ -164,6 +164,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.redisClient.expire(statsKey, 60);
   }
 
+  async setParticipantStateOnly(
+    eventId: number,
+    participantId: number,
+    state: string,
+  ): Promise<void> {
+    const statsKey = `participant_stats:${participantId}`;
+    await this.redisClient.hset(statsKey, 'participantState', state);
+  }
+
   // ═══════════════════════════════════════════════════════════════
   //  IDENTITY CACHE (participantId → userId)
   // ═══════════════════════════════════════════════════════════════
