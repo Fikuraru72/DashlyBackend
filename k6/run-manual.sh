@@ -16,13 +16,36 @@ DRAIN_DURATION=${DRAIN_DURATION:-30s}
 MAX_E2E_P95_MS=${MAX_E2E_P95_MS:-3000}
 MQTT_LOCAL_PORT=${MQTT_LOCAL_PORT:-1884}
 VPS=${VPS:-root@38.103.170.148}
+AUTH_EMAIL=${AUTH_EMAIL:-admin@dashly.com}
+
+login() {
+  local password=${AUTH_PASSWORD:-}
+  if [[ -z "$password" ]]; then
+    read -rsp "Password for ${AUTH_EMAIL}: " password
+    echo
+  fi
+
+  STAFF_ACCESS_TOKEN=$(
+    AUTH_EMAIL="$AUTH_EMAIL" AUTH_PASSWORD="$password" \
+      node -e 'process.stdout.write(JSON.stringify({email: process.env.AUTH_EMAIL, password: process.env.AUTH_PASSWORD}))' \
+      | curl -fsS "$API_URL/auth/login" -H 'content-type: application/json' --data-binary @- \
+      | node -e "let body=''; process.stdin.on('data', chunk => body += chunk).on('end', () => { const token = JSON.parse(body).accessToken; if (!token) throw new Error('Login response has no accessToken'); process.stdout.write(token); })"
+  )
+  export STAFF_ACCESS_TOKEN
+  unset AUTH_PASSWORD
+  echo "Authenticated as ${AUTH_EMAIL}."
+}
 
 usage() {
   cat <<'EOF'
 Usage: ./k6/run-manual.sh <http|race|all>
 
 Required:
-  EVENT_ID=... STAFF_ACCESS_TOKEN=... CONFIRM_PRODUCTION_LOAD=YES
+  CONFIRM_PRODUCTION_LOAD=YES
+
+Authentication:
+  Automatically logs in as AUTH_EMAIL (default admin@dashly.com) when STAFF_ACCESS_TOKEN is empty.
+  Set AUTH_PASSWORD or enter it through the hidden prompt.
 
 Race mode also requires:
   k6/participants.json containing [{"userId": 123}, ...]
@@ -32,11 +55,8 @@ Defaults:
   UPDATE_INTERVAL_MS=1000 DRAIN_DURATION=30s MAX_E2E_P95_MS=3000
 
 Examples:
-  EVENT_ID=42 STAFF_ACCESS_TOKEN=... CONFIRM_PRODUCTION_LOAD=YES \
-    ./k6/run-manual.sh http
-
-  EVENT_ID=42 STAFF_ACCESS_TOKEN=... CONFIRM_PRODUCTION_LOAD=YES \
-    ./k6/run-manual.sh race
+  CONFIRM_PRODUCTION_LOAD=YES ./k6/run-manual.sh http
+  CONFIRM_PRODUCTION_LOAD=YES PARTICIPANT_LIMIT=25 ./k6/run-manual.sh race
 EOF
 }
 
@@ -54,7 +74,9 @@ if [[ -z ${EVENT_ID:-} && -f "$ROOT/k6/prepared.json" ]]; then
   export EVENT_ID
 fi
 : "${EVENT_ID:?Set EVENT_ID or run k6/prepare.cjs first}"
-: "${STAFF_ACCESS_TOKEN:?Set STAFF_ACCESS_TOKEN for that event}"
+if [[ -z ${STAFF_ACCESS_TOKEN:-} ]]; then
+  login
+fi
 
 mkdir -p "$RESULTS"
 stamp=$(date -u +%Y%m%dT%H%M%SZ)

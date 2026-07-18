@@ -10,13 +10,7 @@ Nothing here runs automatically. Use only with a dedicated `LIVE` test event and
 
 ## Prepare automatically
 
-Obtain a `SUPER_ADMIN` or authorized staff access token. Access tokens expire after 15 minutes, so obtain it immediately before preparation/test.
-
-```bash
-curl -sS https://apiv2.dashlytrack.cloud/auth/login \
-  -H 'content-type: application/json' \
-  --data '{"email":"staff@example.com","password":"..."}'
-```
+Use a `SUPER_ADMIN` or authorized staff account. `run-manual.sh` automatically obtains a fresh 15-minute access token when `STAFF_ACCESS_TOKEN` is empty. It defaults to `admin@dashly.com` and securely prompts for the password. Override the account with `AUTH_EMAIL`.
 
 Do not store credentials or tokens in repository files.
 
@@ -35,16 +29,37 @@ Preparation intentionally does not delete existing accounts or events. Every run
 Small smoke load:
 
 ```bash
-STAFF_ACCESS_TOKEN='...' \
 CONFIRM_PRODUCTION_LOAD=YES \
 DURATION=2m PARTICIPANT_LIMIT=10 SPECTATORS=10 OPERATORS=2 SOCKET_CLIENTS=2 \
 ./k6/run-manual.sh all
 ```
 
+Nushell equivalent:
+
+```nu
+with-env {
+  CONFIRM_PRODUCTION_LOAD: "YES"
+  DURATION: "2m"
+  PARTICIPANT_LIMIT: "10"
+  SPECTATORS: "10"
+  OPERATORS: "2"
+  SOCKET_CLIENTS: "2"
+} { ./k6/run-manual.sh all }
+```
+
+The script asks for the admin password without echoing it. Fully non-interactive Nushell:
+
+```nu
+with-env {
+  AUTH_PASSWORD: "your-password"
+  CONFIRM_PRODUCTION_LOAD: "YES"
+  PARTICIPANT_LIMIT: "25"
+} { ./k6/run-manual.sh all }
+```
+
 Expected race load example:
 
 ```bash
-STAFF_ACCESS_TOKEN='...' \
 CONFIRM_PRODUCTION_LOAD=YES \
 DURATION=30m PARTICIPANT_LIMIT=100 SPECTATORS=500 OPERATORS=20 SOCKET_CLIENTS=20 \
 UPDATE_INTERVAL_MS=1000 DRAIN_DURATION=60s \
@@ -66,7 +81,7 @@ Every command still requires the environment variables shown above.
 2. Repeat with `PARTICIPANT_LIMIT=25`, `50`, `75`, then `100` against the same prepared dataset.
 3. Expected participant count, `30m`.
 4. Stop if error rate exceeds 1%, queue lag keeps growing, containers restart, or host memory becomes unsafe.
-4. Run expected load for the real race duration only after short stages recover cleanly.
+5. Run expected load for the real race duration only after short stages recover cleanly.
 
 ## Read the results
 
