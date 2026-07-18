@@ -29,6 +29,8 @@ services:
       - osrm-bicycle
     expose:
       - '3000'
+    networks:
+      - dashly-network
     healthcheck:
       test:
         [

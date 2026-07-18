@@ -427,7 +427,7 @@ Dokploy + Traefik on Rocky Linux
            ├── NestJS backend (GHCR image)
            ├── Redis
            ├── Mosquitto
-           └── OSRM MLD, bicycle profile, Java OSM extract
+           └── OSRM MLD, bicycle profile, East Java OSM graph
 
 DashlyBackend ── TLS ── Supabase PostgreSQL</code></pre>
           <p>
@@ -468,8 +468,8 @@ DashlyBackend ── TLS ── Supabase PostgreSQL</code></pre>
                 <td>latest stable at installation time</td>
               </tr>
               <tr>
-                <td>Java OSM data</td>
-                <td>Geofabrik <code>java-latest.osm.pbf</code></td>
+                <td>Active OSRM data</td>
+                <td>East Java graph derived from OSM relation <code>3438227</code></td>
               </tr>
             </tbody>
           </table>
@@ -694,11 +694,15 @@ docker/build-push-action@v7.3.0</code></pre>
             <code>GITHUB_TOKEN</code>; no publishing PAT is required.
           </p>
           <div class="chapter-kicker">Phase 06 · One-time heavy operation</div>
-          <h2 id="6-prepare-the-java-bicycle-osrm-graph">6. Prepare the Java bicycle OSRM graph</h2>
+          <h2 id="6-prepare-the-east-java-bicycle-osrm-graph">
+            6. Prepare the East Java bicycle OSRM graph
+          </h2>
           <p>
-            The Geofabrik Java extract is roughly 850 MB and changes daily. Preparation creates
-            multiple graph files and needs substantial temporary disk/RAM. Keep at least 20 GB free
-            before starting:
+            Production uses the prepared East Java graph in
+            <code>dashly-osrm-east-java-test</code>. The full Java graph remains in
+            <code>dashly-osrm-bicycle</code> only as an inactive rollback. Graph preparation is a
+            maintenance operation and must not run during normal deployment. Keep at least 20 GB
+            free when rebuilding from source.
           </p>
           <div class="sourceCode" id="cb18">
             <pre
@@ -706,40 +710,27 @@ docker/build-push-action@v7.3.0</code></pre>
             ><code class="sourceCode bash"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="fu">df</span> <span class="at">-h</span> /</span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="fu">free</span> <span class="at">-h</span></span></code></pre>
           </div>
-          <p>Run once on the VPS:</p>
-          <div class="sourceCode" id="cb19">
-            <pre
-              class="sourceCode bash"
-            ><code class="sourceCode bash"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /opt/dashly/DashlyBackend</span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> <span class="at">-u</span> deploy scripts/osrm-prepare.sh</span></code></pre>
-          </div>
-          <p>It will:</p>
-          <ol type="1">
-            <li>Pull official <code>ghcr.io/project-osrm/osrm-backend:v26.7.3-debian</code>.</li>
-            <li>Download <code>java-latest.osm.pbf</code> from Geofabrik with resume/retry.</li>
-            <li>Run <code>osrm-extract</code> using <code>/opt/bicycle.lua</code>.</li>
-            <li>Run MLD <code>osrm-partition</code> and <code>osrm-customize</code>.</li>
-            <li>Store the result in named volume <code>dashly-osrm-bicycle</code>.</li>
-            <li>Delete the downloaded PBF after success.</li>
-          </ol>
+          <p>
+            The East Java graph has already been extracted, partitioned, customized, and smoke
+            tested. Do not run <code>FORCE_OSRM_REBUILD=1</code> before the first deployment. A
+            future rebuild must use the East Java boundary, bicycle profile, and MLD pipeline, then
+            write <code>east-java.osrm*</code> into <code>dashly-osrm-east-java-test</code>.
+          </p>
           <p>Verify:</p>
           <div class="sourceCode" id="cb20">
             <pre
               class="sourceCode bash"
-            ><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> volume inspect dashly-osrm-bicycle</span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> run <span class="at">--rm</span> <span class="at">-v</span> dashly-osrm-bicycle:/data <span class="dt">\</span></span>
+            ><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> volume inspect dashly-osrm-east-java-test</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> run <span class="at">--rm</span> <span class="at">-v</span> dashly-osrm-east-java-test:/data <span class="dt">\</span></span>
 <span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  ghcr.io/project-osrm/osrm-backend:v26.7.3-debian <span class="dt">\</span></span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  test <span class="at">-f</span> /data/java.osrm</span></code></pre>
-          </div>
-          <p>To update map data later:</p>
-          <div class="sourceCode" id="cb21">
-            <pre
-              class="sourceCode bash"
-            ><code class="sourceCode bash"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="va">FORCE_OSRM_REBUILD</span><span class="op">=</span>1 <span class="ex">scripts/osrm-prepare.sh</span></span></code></pre>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  test <span class="at">-f</span> /data/east-java.osrm.partition <span class="at">-a</span> <span class="dt">\</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>       <span class="at">-f</span> /data/east-java.osrm.cells <span class="at">-a</span> <span class="dt">\</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">-f</span> /data/east-java.osrm.cell_metrics</span></code></pre>
           </div>
           <p>
-            Schedule this manually during a maintenance window. Do not rebuild the graph on every
-            application deployment.
+            To update map data later, repeat the East Java extraction and MLD build manually during
+            a maintenance window, validate the new graph in a separate volume, then switch the
+            Compose volume. Never rebuild the active graph during ordinary application deployment.
           </p>
           <div class="chapter-kicker">Phase 07 · Runtime assembly</div>
           <h2 id="7-create-the-dokploy-compose-deployment">
@@ -778,7 +769,9 @@ MQTT_HOST=mosquitto
 MQTT_PORT=1883
 OSRM_ENABLED=true
 OSRM_URL=http://osrm-bicycle:5000
-OSRM_PROFILE=bicycle</code></pre>
+OSRM_PROFILE=bicycle
+OSRM_REGION=east-java
+OSRM_MAX_SNAP_DISTANCE_METERS=100</code></pre>
           <p>Generate the JWT secret locally:</p>
           <div class="sourceCode" id="cb23">
             <pre
@@ -806,14 +799,16 @@ Password/token: PAT with read:packages</code></pre>
           </p>
           <h3 id="persistent-volumes">Persistent volumes</h3>
           <p>The Compose file uses named volumes:</p>
-          <pre class="text"><code>dashly-osrm-bicycle   OSRM Java graph
-redis_data             Redis AOF
+          <pre class="text"><code>dashly-osrm-east-java-test  Active East Java OSRM graph
+dashly-osrm-bicycle         Inactive full-Java rollback graph
+redis_data                  Redis AOF
 mosquitto.conf         Read-only Mosquitto config from the repository
 mosquitto_data         Mosquitto persistence
 mosquitto_log          Mosquitto logs</code></pre>
           <p>
-            Never delete volumes during normal redeploys. Deleting
-            <code>dashly-osrm-bicycle</code> requires preparing the graph again.
+            Never delete either OSRM volume during normal redeploys. Production mounts
+            <code>dashly-osrm-east-java-test</code>; <code>dashly-osrm-bicycle</code> remains
+            available for rollback only.
           </p>
           <h3 id="mosquitto-config">Mosquitto config</h3>
           <p>
@@ -912,7 +907,7 @@ NEXT_PUBLIC_BACKEND_URL=https://api.example.com</code></pre>
           <div class="sourceCode" id="cb33">
             <pre
               class="sourceCode bash"
-            ><code class="sourceCode bash"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="st">&#39;http://osrm-bicycle:5000/route/v1/bicycle/106.827,-6.175;106.829,-6.177?overview=false&#39;</span></span></code></pre>
+            ><code class="sourceCode bash"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> <span class="st">&#39;http://osrm-bicycle:5000/route/v1/bicycle/112.7508,-7.2575;112.7525,-7.259?overview=false&#39;</span></span></code></pre>
           </div>
           <p>Expected JSON contains <code>"code":"Ok"</code>.</p>
           <h3 id="containers-and-resources">Containers and resources</h3>
@@ -938,7 +933,8 @@ NEXT_PUBLIC_BACKEND_URL=https://api.example.com</code></pre>
             <li>Fetch dashboard events.</li>
             <li>Connect Socket.IO.</li>
             <li>Join an authorized event room.</li>
-            <li>Create/normalize a bicycle route inside Java.</li>
+            <li>Create/normalize a bicycle route inside East Java.</li>
+            <li>Confirm Jakarta and Semarang routes are rejected with HTTP 400.</li>
             <li>Confirm Redis/MQTT consumers and live positions.</li>
           </ol>
           <div class="chapter-kicker">Phase 11 · Keep it healthy</div>
