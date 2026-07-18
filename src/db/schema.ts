@@ -122,6 +122,7 @@ export const locationLogs = pgTable(
     longitude: doublePrecision('longitude').notNull(),
     altitude: doublePrecision('altitude'),
     speed: doublePrecision('speed'),
+    battery: integer('battery'), // Battery percentage
     distanceDelta: doublePrecision('distance_delta'), // meters from last point
     speedCalculated: doublePrecision('speed_calculated'), // m/s from haversine
     isOffline: boolean('is_offline').default(false).notNull(),

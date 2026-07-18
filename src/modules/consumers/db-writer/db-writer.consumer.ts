@@ -93,11 +93,13 @@ export class DbWriterConsumer implements OnModuleInit, OnModuleDestroy {
         longitude: e.intelligence?.snappedLng ?? e.lng,
         altitude: e.altitude,
         speed: e.speedFromClient,
+        battery: e.battery ?? null,
         distanceDelta: e.distanceDelta,
         speedCalculated: e.speedCalculated,
         isAnomaly: e.flags.isAnomaly,
         isOffline: e.flags.isOffline,
         capturedAt: new Date(e.capturedAt),
+        serverReceivedAt: new Date(e.serverReceivedAt),
       }));
 
       await this.db
