@@ -11,7 +11,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import Redis from 'ioredis';
 
@@ -52,9 +52,14 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
   }
 
   handleConnection(client: AuthenticatedSocket) {
+    const token = client.handshake.auth?.token;
+    if (token === undefined) {
+      this.logger.log(`Public client connected: ${client.id}`);
+      return;
+    }
+
     try {
-      const token = client.handshake.auth?.token;
-      if (typeof token !== 'string') throw new Error('Missing token');
+      if (typeof token !== 'string') throw new Error('Invalid token');
       const payload = this.jwtService.verify<JwtPayload>(token);
       if (payload.tokenType !== 'access' || !payload.email || !payload.role) {
         throw new Error('Wrong token type');
@@ -64,7 +69,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
         email: payload.email,
         role: payload.role,
       };
-      this.logger.log(`Client connected: ${client.id}`);
+      this.logger.log(`Authenticated client connected: ${client.id}`);
     } catch {
       client.emit('auth_error', { message: 'Invalid access token' });
       client.disconnect(true);
@@ -95,12 +100,42 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     return { event: 'joinedRoom', data: room };
   }
 
+  @SubscribeMessage('joinPublicEventRoom')
+  async handleJoinPublicRoom(
+    @MessageBody() data: { eventId: number },
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    const eventId = data?.eventId;
+    if (!Number.isInteger(eventId) || eventId <= 0) {
+      return { event: 'joinError', data: 'Invalid public event room request' };
+    }
+    const event = await this.db.query.events.findFirst({
+      where: and(eq(schema.events.id, eventId), isNull(schema.events.deletedAt)),
+      columns: { id: true },
+    });
+    if (!event) return { event: 'joinError', data: 'Event not found' };
+
+    const room = `public_event_${eventId}`;
+    await client.join(room);
+    return { event: 'joinedRoom', data: room };
+  }
+
   @SubscribeMessage('leaveEventRoom')
   async handleLeaveRoom(
     @MessageBody() data: { eventId: number },
     @ConnectedSocket() client: AuthenticatedSocket,
   ) {
     const room = `event_${data.eventId}`;
+    await client.leave(room);
+    return { event: 'leftRoom', data: room };
+  }
+
+  @SubscribeMessage('leavePublicEventRoom')
+  async handleLeavePublicRoom(
+    @MessageBody() data: { eventId: number },
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    const room = `public_event_${data.eventId}`;
     await client.leave(room);
     return { event: 'leftRoom', data: room };
   }
@@ -128,14 +163,20 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
   }
 
   broadcastPositionUpdate(eventId: number, payload: any) {
-    this.emit(eventId, 'position_batch', {
+    const update = {
       eventId,
       positions: [{ ...payload, lat: Number(payload.lat), lng: Number(payload.lng) }],
-    });
+    };
+    this.emit(eventId, 'position_batch', update);
+    this.emitPublic(eventId, 'position_batch', update);
   }
 
   private emit(eventId: number, event: string, payload: unknown) {
     this.emitter.to(`event_${eventId}`).emit(event, payload);
+  }
+
+  private emitPublic(eventId: number, event: string, payload: unknown) {
+    this.emitter.to(`public_event_${eventId}`).emit(event, payload);
   }
 
   broadcastAnomalyDetected(eventId: number, payload: any) {
@@ -154,7 +195,9 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     this.emit(eventId, 'anomaly_detected', payload);
   }
   broadcastEventStatus(eventId: number, status: string) {
-    this.emit(eventId, 'EVENT_STATUS_CHANGED', { status });
+    const payload = { status };
+    this.emit(eventId, 'EVENT_STATUS_CHANGED', payload);
+    this.emitPublic(eventId, 'EVENT_STATUS_CHANGED', payload);
   }
   broadcastRankingUpdate(eventId: number, payload: any) {
     this.emit(eventId, 'ranking_update', payload);

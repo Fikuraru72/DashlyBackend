@@ -68,9 +68,6 @@ export class MqttIngestService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleMessage(topic: string, message: Buffer) {
-    const fs = require('fs');
-    fs.appendFileSync('mqtt_debug.log', `[DEBUG] topic: ${topic}\n`);
-    fs.appendFileSync('mqtt_debug.log', `[DEBUG] payload: ${message.toString()}\n`);
     try {
       const parts = topic.split('/');
       const eventId = parseInt(parts[2], 10);

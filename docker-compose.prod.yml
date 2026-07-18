@@ -33,6 +33,14 @@ services:
       - '3000'
     networks:
       - dashly-network
+    labels:
+      - traefik.http.services.dashly-backend-fdjkqy-1-web.loadbalancer.sticky.cookie.name=dashly_api
+      - traefik.http.services.dashly-backend-fdjkqy-1-web.loadbalancer.sticky.cookie.httpOnly=true
+      - traefik.http.services.dashly-backend-fdjkqy-1-web.loadbalancer.sticky.cookie.sameSite=lax
+      - traefik.http.services.dashly-backend-fdjkqy-1-websecure.loadbalancer.sticky.cookie.name=dashly_api
+      - traefik.http.services.dashly-backend-fdjkqy-1-websecure.loadbalancer.sticky.cookie.httpOnly=true
+      - traefik.http.services.dashly-backend-fdjkqy-1-websecure.loadbalancer.sticky.cookie.secure=true
+      - traefik.http.services.dashly-backend-fdjkqy-1-websecure.loadbalancer.sticky.cookie.sameSite=lax
     healthcheck:
       test:
         [
