@@ -26,67 +26,6 @@ export class OsrmService {
 
   constructor(private readonly configService: ConfigService) {}
 
-  async normalizeRoute(
-    category: EventCategory,
-    geojson: unknown,
-  ): Promise<NormalizedRoute | null> {
-    const rawRoute = this.extractLineString(geojson);
-    if (!rawRoute) return null;
-
-    const fallback = {
-      geoJson: rawRoute,
-      totalDistanceMeters: Math.round(
-        this.calculateDistance(rawRoute.geometry.coordinates),
-      ),
-    };
-
-    if (
-      this.configService.get('OSRM_ENABLED', 'true') === 'false' ||
-      rawRoute.properties?.source === 'gpx'
-    ) {
-      // For GPX or when OSRM is disabled, just enrich the raw coordinates with elevation
-      const elevationData = await this.fetchElevationProfile(rawRoute.geometry.coordinates);
-      return {
-        geoJson: rawRoute,
-        totalDistanceMeters: Math.round(
-          this.calculateDistance(rawRoute.geometry.coordinates),
-        ),
-        altitudeProfile: elevationData.altitudeProfile,
-        totalElevationMeters: elevationData.totalElevationMeters,
-      };
-    }
-
-    try {
-      const coordinates = this.limitWaypoints(rawRoute.geometry.coordinates);
-      const coordinatePath = coordinates
-        .map(([lng, lat]) => `${lng},${lat}`)
-        .join(';');
-      const profile = this.getProfile(category);
-      const url = `${this.getBaseUrl()}/route/v1/${profile}/${coordinatePath}?overview=full&geometries=geojson&steps=false`;
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'dashly-backend/1.0' },
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      if (!response.ok) {
-        throw new Error(`OSRM ${response.status}: ${await response.text()}`);
-      }
-
-      const body = (await response.json()) as {
-        routes?: Array<{
-          distance?: number;
-          geometry?: LineString;
-        }>;
-      };
-      const route = body.routes?.[0];
-      if (!route?.geometry?.coordinates?.length) return fallback;
-
-      // Fetch elevation for the normalized route coordinates
-      const finalCoordinates = route.geometry.coordinates;
-      const elevationData = await this.fetchElevationProfile(finalCoordinates);
   async fetchElevationProfile(finalCoordinates: number[][]): Promise<{ altitudeProfile?: any[], totalElevationMeters: number }> {
     let altitudeProfile: any[] | undefined;
     let totalElevationMeters = 0;
@@ -154,6 +93,69 @@ export class OsrmService {
 
     return { altitudeProfile, totalElevationMeters };
   }
+
+
+  async normalizeRoute(
+    category: EventCategory,
+    geojson: unknown,
+  ): Promise<NormalizedRoute | null> {
+    const rawRoute = this.extractLineString(geojson);
+    if (!rawRoute) return null;
+
+    const fallback = {
+      geoJson: rawRoute,
+      totalDistanceMeters: Math.round(
+        this.calculateDistance(rawRoute.geometry.coordinates),
+      ),
+    };
+
+    if (
+      this.configService.get('OSRM_ENABLED', 'true') === 'false' ||
+      rawRoute.properties?.source === 'gpx'
+    ) {
+      // For GPX or when OSRM is disabled, just enrich the raw coordinates with elevation
+      const elevationData = await this.fetchElevationProfile(rawRoute.geometry.coordinates);
+      return {
+        geoJson: rawRoute,
+        totalDistanceMeters: Math.round(
+          this.calculateDistance(rawRoute.geometry.coordinates),
+        ),
+        altitudeProfile: elevationData.altitudeProfile,
+        totalElevationMeters: elevationData.totalElevationMeters,
+      };
+    }
+
+    try {
+      const coordinates = this.limitWaypoints(rawRoute.geometry.coordinates);
+      const coordinatePath = coordinates
+        .map(([lng, lat]) => `${lng},${lat}`)
+        .join(';');
+      const profile = this.getProfile(category);
+      const url = `${this.getBaseUrl()}/route/v1/${profile}/${coordinatePath}?overview=full&geometries=geojson&steps=false`;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'dashly-backend/1.0' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!response.ok) {
+        throw new Error(`OSRM ${response.status}: ${await response.text()}`);
+      }
+
+      const body = (await response.json()) as {
+        routes?: Array<{
+          distance?: number;
+          geometry?: LineString;
+        }>;
+      };
+      const route = body.routes?.[0];
+      if (!route?.geometry?.coordinates?.length) return fallback;
+
+      // Fetch elevation for the normalized route coordinates
+      const finalCoordinates = route.geometry.coordinates;
+      const elevationData = await this.fetchElevationProfile(finalCoordinates);
 
       return {
         geoJson: {
