@@ -9,6 +9,7 @@ import { StreamModule } from '../stream/stream.module';
 import { DatabaseModule } from '../../db/database.module';
 import { WebSocketModule } from '../websocket/websocket.module';
 import { RedisModule } from '../redis/redis.module';
+import { EventsModule } from '../events/events.module';
 
 // Phase 1 Intelligence
 import { ProgressEngine } from './intelligence/progress.engine';
