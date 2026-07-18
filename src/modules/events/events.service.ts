@@ -135,7 +135,8 @@ export class EventsService {
           routeGeojson: normalizedRoute?.geoJson ?? dto.routeGeojson,
           totalDistanceMeters:
             normalizedRoute?.totalDistanceMeters ?? dto.totalDistanceMeters,
-          totalElevationMeters: dto.totalElevationMeters,
+          totalElevationMeters: normalizedRoute?.totalElevationMeters ?? dto.totalElevationMeters,
+          altitudeProfile: normalizedRoute?.altitudeProfile,
           startTime: new Date(dto.startTime),
           endTime: new Date(dto.endTime),
           registrationOpen: dto.registrationOpen
@@ -448,6 +449,12 @@ export class EventsService {
       updateData.routeGeojson = normalizedRoute?.geoJson ?? dto.routeGeojson;
       if (normalizedRoute) {
         updateData.totalDistanceMeters = normalizedRoute.totalDistanceMeters;
+        if (normalizedRoute.altitudeProfile) {
+          updateData.altitudeProfile = normalizedRoute.altitudeProfile;
+        }
+        if (normalizedRoute.totalElevationMeters !== undefined) {
+          updateData.totalElevationMeters = normalizedRoute.totalElevationMeters;
+        }
       }
     }
     if (dto.category !== undefined) updateData.category = dto.category;

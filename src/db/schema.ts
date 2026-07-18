@@ -91,6 +91,7 @@ export const events = pgTable('events', {
   totalDistanceMeters: integer('total_distance_meters'),
   totalElevationMeters: integer('total_elevation_meters'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  altitudeProfile: jsonb('altitude_profile'), // Array of { distance, elevation, lat, lng, cumGain, cumLoss }
   deletedAt: timestamp('deleted_at'),
 });
 

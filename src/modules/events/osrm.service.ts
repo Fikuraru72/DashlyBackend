@@ -8,6 +8,15 @@ type UnknownRecord = Record<string, unknown>;
 export interface NormalizedRoute {
   geoJson: Feature<LineString>;
   totalDistanceMeters: number;
+  altitudeProfile?: Array<{
+    distance: number;
+    elevation: number;
+    lat: number;
+    lng: number;
+    cumGain: number;
+    cumLoss: number;
+  }>;
+  totalElevationMeters?: number;
 }
 
 @Injectable()
@@ -35,6 +44,7 @@ export class OsrmService {
       this.configService.get('OSRM_ENABLED', 'true') === 'false' ||
       rawRoute.properties?.source === 'gpx'
     ) {
+      // If it's GPX, we might not have altitudeProfile in fallback, but it's handled by gpx-parser anyway
       return fallback;
     }
 
@@ -66,6 +76,72 @@ export class OsrmService {
       const route = body.routes?.[0];
       if (!route?.geometry?.coordinates?.length) return fallback;
 
+      // Fetch elevation for the normalized route coordinates
+      const finalCoordinates = route.geometry.coordinates;
+      let altitudeProfile: any[] | undefined;
+      let totalElevationMeters = 0;
+      
+      try {
+        const locations = finalCoordinates.map(coord => ({ latitude: coord[1], longitude: coord[0] }));
+        // Chunk locations if too large for OpenElevation
+        const maxChunkSize = 250; // OE API limit per request
+        const results: any[] = [];
+        
+        for (let i = 0; i < locations.length; i += maxChunkSize) {
+          const chunk = locations.slice(i, i + maxChunkSize);
+          const oeResponse = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ locations: chunk }),
+          });
+          if (oeResponse.ok) {
+            const oeBody = await oeResponse.json() as any;
+            if (oeBody && oeBody.results) {
+              results.push(...oeBody.results);
+            }
+          }
+        }
+        
+        if (results.length === finalCoordinates.length) {
+          altitudeProfile = [];
+          let totalDist = 0;
+          let cumGain = 0;
+          let cumLoss = 0;
+          
+          for (let i = 0; i < finalCoordinates.length; i++) {
+            const ele = results[i].elevation || 0;
+            if (i > 0) {
+              const prevCoord = finalCoordinates[i - 1];
+              const currCoord = finalCoordinates[i];
+              const dist = this.haversine(prevCoord, currCoord);
+              totalDist += dist;
+              
+              const prevEle = results[i - 1].elevation || 0;
+              const eleDiff = ele - prevEle;
+              if (eleDiff > 0) {
+                totalElevationMeters += eleDiff;
+                cumGain += eleDiff;
+              } else {
+                cumLoss += Math.abs(eleDiff);
+              }
+            }
+            altitudeProfile.push({
+              distance: Math.round(totalDist),
+              elevation: ele,
+              lat: finalCoordinates[i][1],
+              lng: finalCoordinates[i][0],
+              cumGain: Math.round(cumGain),
+              cumLoss: Math.round(cumLoss)
+            });
+            
+            // Mutate geojson coordinates to include Z
+            finalCoordinates[i][2] = ele;
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`Open-Elevation API failed: ${(e as Error).message}`);
+      }
+
       return {
         geoJson: {
           type: 'Feature',
@@ -73,8 +149,10 @@ export class OsrmService {
           geometry: route.geometry,
         },
         totalDistanceMeters: Math.round(
-          route.distance ?? this.calculateDistance(route.geometry.coordinates),
+          route.distance ?? this.calculateDistance(finalCoordinates),
         ),
+        altitudeProfile,
+        totalElevationMeters: Math.round(totalElevationMeters),
       };
     } catch (error) {
       this.logger.warn(
