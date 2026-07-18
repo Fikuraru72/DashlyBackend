@@ -1046,6 +1046,7 @@ export class EventsService {
         progressPercentage: progress?.progressPercentage ?? 0,
         distanceCovered: progress?.distanceCovered ?? 0,
         checkpointsCompleted: progress?.checkpointsCompleted ?? 0,
+        participantState: participant.participantState,
       }
     };
   }
