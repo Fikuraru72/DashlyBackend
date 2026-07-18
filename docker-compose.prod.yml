@@ -204,8 +204,10 @@ networks:
 volumes:
   redis_data:
   osrm_east_java_data:
+    external: true
     name: dashly-osrm-east-java-test
   osrm_bicycle_rollback:
+    external: true
     name: dashly-osrm-bicycle
   mosquitto_data:
   mosquitto_log:
