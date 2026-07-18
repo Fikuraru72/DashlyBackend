@@ -63,17 +63,21 @@ jobs:
       - name: Deploy Dokploy Compose
         if: github.ref == 'refs/heads/master'
         env:
-          DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
-          DOKPLOY_COMPOSE_ID: ${{ vars.DOKPLOY_COMPOSE_ID }}
-          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          if [ -z "$DOKPLOY_URL" ] || [ -z "$DOKPLOY_COMPOSE_ID" ] || [ -z "$DOKPLOY_API_KEY" ]; then
-            echo "Dokploy is not configured; skipping deployment."
+          if [ -z "$DOKPLOY_DEPLOY_WEBHOOK" ]; then
+            echo "Dokploy webhook is not configured; skipping deployment."
             exit 0
           fi
 
-          curl --fail-with-body --request POST \
-            "$DOKPLOY_URL/api/compose.redeploy" \
-            --header "x-api-key: $DOKPLOY_API_KEY" \
-            --header 'Content-Type: application/json' \
-            --data "{\"composeId\":\"$DOKPLOY_COMPOSE_ID\",\"title\":\"Deploy ${GITHUB_SHA::7}\"}"
+          jq -n \
+            --arg ref "$GITHUB_REF" \
+            --arg sha "$GITHUB_SHA" \
+            --arg message "$COMMIT_MESSAGE" \
+            '{ref: $ref, head_commit: {id: $sha, message: $message}, commits: []}' \
+            | curl --fail-with-body --request POST \
+                "$DOKPLOY_DEPLOY_WEBHOOK" \
+                --header 'Content-Type: application/json' \
+                --header 'x-github-event: push' \
+                --data-binary @-
