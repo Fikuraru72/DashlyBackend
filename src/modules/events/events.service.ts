@@ -250,6 +250,8 @@ export class EventsService {
         startTime: true,
         endTime: true,
         routeGeojson: true,
+        altitudeProfile: true,
+        totalElevationMeters: true,
       },
     });
 
@@ -284,6 +286,8 @@ export class EventsService {
         startTime: event.startTime,
         endTime: event.endTime,
         routeGeojson: event.routeGeojson,
+        altitudeProfile: event.altitudeProfile,
+        totalElevationMeters: event.totalElevationMeters,
       },
     };
   }
