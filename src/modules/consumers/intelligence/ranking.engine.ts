@@ -60,13 +60,13 @@ export class RankingEngine implements OnModuleInit {
   ): Promise<{ score: number; rank: number; totalParticipants: number }> {
     // ── Anomaly exclusion: return previous score unchanged ──────
     if (isAnomaly) {
-      const zeroBasedRank = await this.redisService.getRank(eventId, participantId);
-      const totalParticipants = await this.redisService.getTotalRanked(eventId);
-      // Read previous score from sorted set
-      const allRankings = await this.redisService.getAllRankings(eventId);
-      const prev = allRankings.find((r) => r.participantId === participantId);
+      const [zeroBasedRank, totalParticipants, previousScore] = await Promise.all([
+        this.redisService.getRank(eventId, participantId),
+        this.redisService.getTotalRanked(eventId),
+        this.redisService.getRankingScore(eventId, participantId),
+      ]);
       return {
-        score: prev?.score ?? 0,
+        score: previousScore ?? 0,
         rank: zeroBasedRank !== null ? zeroBasedRank + 1 : 1,
         totalParticipants,
       };
@@ -101,10 +101,7 @@ export class RankingEngine implements OnModuleInit {
     newScore = Math.round(newScore * 100) / 100;
 
     // ── 7. Delta stabilization (anti-cheat) ────────────────────
-    // Read previous score
-    const allRankings = await this.redisService.getAllRankings(eventId);
-    const prevEntry = allRankings.find((r) => r.participantId === participantId);
-    const prevScore = prevEntry?.score ?? 0;
+    const prevScore = (await this.redisService.getRankingScore(eventId, participantId)) ?? 0;
 
     const maxDelta = progressPercentage > 90 ? this.MAX_DELTA_FINISH : this.MAX_DELTA_NORMAL;
 
@@ -118,8 +115,10 @@ export class RankingEngine implements OnModuleInit {
     void this.flushRankingsIfDue(eventId);
 
     // ── 9. Read rank ───────────────────────────────────────────
-    const zeroBasedRank = await this.redisService.getRank(eventId, participantId);
-    const totalParticipants = await this.redisService.getTotalRanked(eventId);
+    const [zeroBasedRank, totalParticipants] = await Promise.all([
+      this.redisService.getRank(eventId, participantId),
+      this.redisService.getTotalRanked(eventId),
+    ]);
 
     return {
       score: newScore,

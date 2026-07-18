@@ -200,6 +200,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.redisClient.expire(key, 86400);
   }
 
+  async getRankingScore(eventId: number, participantId: number): Promise<number | null> {
+    const score = await this.redisClient.zscore(`ranking:${eventId}`, participantId.toString());
+    return score === null ? null : Number(score);
+  }
+
   /** Returns 0-based rank (null if not in set). Caller should add 1 for display. */
   async getRank(eventId: number, participantId: number): Promise<number | null> {
     const key = `ranking:${eventId}`;
@@ -350,6 +355,31 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async releaseLock(key: string): Promise<void> {
     await this.redisClient.del(key);
+  }
+
+  async acquireOwnedLock(key: string, token: string, ttlMs: number): Promise<boolean> {
+    return (await this.redisClient.set(key, token, 'PX', ttlMs, 'NX')) === 'OK';
+  }
+
+  async extendOwnedLock(key: string, token: string, ttlMs: number): Promise<boolean> {
+    return (
+      (await this.redisClient.eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end",
+        1,
+        key,
+        token,
+        ttlMs,
+      )) === 1
+    );
+  }
+
+  async releaseOwnedLock(key: string, token: string): Promise<void> {
+    await this.redisClient.eval(
+      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+      1,
+      key,
+      token,
+    );
   }
 
   /** 100-event Replay Buffer for debugging. Memory safe with LTRIM and EXPIRE. */

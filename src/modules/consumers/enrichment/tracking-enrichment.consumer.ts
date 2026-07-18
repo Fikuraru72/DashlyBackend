@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Worker, Job } from 'bullmq';
@@ -53,6 +55,9 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
   private dropCountDuplicate = 0;
   private anomalyCount = 0;
 
+  private readonly participantLockTtlMs = 30_000;
+  private readonly participantLockRetryMs = 25;
+
   constructor(
     private readonly stream: TrackingStreamService,
     private readonly redisService: RedisService,
@@ -80,11 +85,11 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
     this.worker = new Worker(
       QUEUE_TRACKING_RAW,
       async (job: Job<TrackingEvent>) => {
-        await this.process(job.data);
+        await this.processWithParticipantLock(job.data);
       },
       {
         connection: this.workerConnection as any,
-        concurrency: 1,
+        concurrency: 5,
       },
     );
 
@@ -103,6 +108,28 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
   // ═══════════════════════════════════════════════════════════════
   //  CORE PROCESSING LOGIC (HARDENED)
   // ═══════════════════════════════════════════════════════════════
+
+  private async processWithParticipantLock(event: TrackingEvent): Promise<void> {
+    const lockKey = `lock:tracking:${event.eventId}:${event.participantId}`;
+    const token = randomUUID();
+
+    while (!(await this.redisService.acquireOwnedLock(lockKey, token, this.participantLockTtlMs))) {
+      await new Promise((resolve) => setTimeout(resolve, this.participantLockRetryMs));
+    }
+
+    const renewal = setInterval(() => {
+      void this.redisService
+        .extendOwnedLock(lockKey, token, this.participantLockTtlMs)
+        .catch((error) => this.logger.error(`Failed to renew ${lockKey}`, error));
+    }, this.participantLockTtlMs / 3);
+
+    try {
+      await this.process(event);
+    } finally {
+      clearInterval(renewal);
+      await this.redisService.releaseOwnedLock(lockKey, token);
+    }
+  }
 
   private async process(event: TrackingEvent): Promise<void> {
     const startMs = Date.now();
@@ -382,25 +409,18 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
     // ── 11. Publish enriched event downstream ────────────────────
     await this.stream.publishEnriched(event);
 
-    // ── 12. Structured observability log ─────────────────────────
+    // ── 12. Log only slow jobs; per-GPS info logs become a bottleneck ──
     const processingMs = Date.now() - startMs;
-    this.logger.log(
-      JSON.stringify({
-        type: 'ENRICHMENT_COMPLETE',
-        participantId,
-        eventId,
-        action: event.gatekeeperAction || 'VALID',
-        progress: event.intelligence?.progressPercentage ?? null,
-        rank: event.intelligence?.rank ?? null,
-        score: event.intelligence?.score ?? null,
-        offRoute: event.intelligence?.offRoute ?? false,
-        stopped: event.intelligence?.stopped ?? false,
-        processingMs,
-        dropsDuplicate: this.dropCountDuplicate,
-        dropsNoise: this.dropCountNoise,
-        anomalyCount: this.anomalyCount,
-      }),
-    );
+    if (processingMs >= 1000) {
+      this.logger.warn(
+        JSON.stringify({
+          type: 'SLOW_ENRICHMENT',
+          participantId,
+          eventId,
+          processingMs,
+        }),
+      );
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
