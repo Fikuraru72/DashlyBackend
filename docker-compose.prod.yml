@@ -13,6 +13,7 @@ x-backend-environment: &backend-environment
 
 x-backend-service: &backend-service
   image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to the GHCR image, for example ghcr.io/owner/dashly-backend:latest}
+  pull_policy: always
   init: true
   env_file:
     - .env
