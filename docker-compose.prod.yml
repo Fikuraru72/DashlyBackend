@@ -177,9 +177,6 @@ services:
     configs:
       - source: mosquitto_config
         target: /mosquitto/config/mosquitto.conf
-        uid: '1883'
-        gid: '1883'
-        mode: 0444
     volumes:
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
