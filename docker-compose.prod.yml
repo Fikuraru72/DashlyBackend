@@ -8,6 +8,7 @@ x-backend-environment: &backend-environment
   OSRM_ENABLED: 'true'
   OSRM_URL: http://osrm-bicycle:5000
   OSRM_PROFILE: bicycle
+  OSRM_REGION: east-java
 
 x-backend-service: &backend-service
   image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to the GHCR image, for example ghcr.io/owner/dashly-backend:latest}
@@ -138,16 +139,16 @@ services:
 
   osrm-bicycle:
     image: ghcr.io/project-osrm/osrm-backend:v26.7.3-debian
-    command: osrm-routed --algorithm mld --threads 2 /data/java.osrm
+    command: osrm-routed --algorithm mld --threads 2 /data/east-java.osrm
     volumes:
-      - osrm_bicycle_data:/data
+      - osrm_east_java_data:/data
     security_opt:
       - no-new-privileges:true
     healthcheck:
       test:
         [
           'CMD-SHELL',
-          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/5000; printf \"GET /route/v1/bicycle/106.827,-6.175;106.829,-6.177?overview=false HTTP/1.0\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/5000; printf \"GET /route/v1/bicycle/112.7508,-7.2575;112.7525,-7.2590?overview=false HTTP/1.0\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'",
         ]
       interval: 30s
       timeout: 5s
@@ -200,7 +201,9 @@ networks:
 
 volumes:
   redis_data:
-  osrm_bicycle_data:
+  osrm_east_java_data:
+    name: dashly-osrm-east-java-test
+  osrm_bicycle_rollback:
     name: dashly-osrm-bicycle
   mosquitto_data:
   mosquitto_log:

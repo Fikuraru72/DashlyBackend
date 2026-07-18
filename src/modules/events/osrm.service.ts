@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Feature, LineString, Position } from 'geojson';
+import { booleanPointInPolygon, point } from '@turf/turf';
+
+import { OSRM_REGIONS, OsrmRegion } from './osrm-regions';
 
 type EventCategory = 'RUNNING' | 'CYCLING';
 type UnknownRecord = Record<string, unknown>;
@@ -23,6 +26,7 @@ export interface NormalizedRoute {
 export class OsrmService {
   private readonly logger = new Logger(OsrmService.name);
   private readonly maxWaypoints = 100;
+  private readonly maxSnapDistanceMeters = 100;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -104,6 +108,8 @@ export class OsrmService {
     const rawRoute = this.extractLineString(geojson);
     if (!rawRoute) return null;
 
+    this.assertCoordinatesInRegion(rawRoute.geometry.coordinates);
+
     const fallback = {
       geoJson: rawRoute,
       totalDistanceMeters: Math.round(this.calculateDistance(rawRoute.geometry.coordinates)),
@@ -145,7 +151,9 @@ export class OsrmService {
           distance?: number;
           geometry?: LineString;
         }>;
+        waypoints?: Array<{ distance?: number }>;
       };
+      this.assertSnapDistances(body.waypoints);
       const route = body.routes?.[0];
       if (!route?.geometry?.coordinates?.length) return fallback;
 
@@ -164,6 +172,7 @@ export class OsrmService {
         totalElevationMeters: Math.round(elevationData.totalElevationMeters),
       };
     } catch (error) {
+      if (error instanceof BadRequestException) throw error;
       this.logger.warn(
         `OSRM route normalization failed, using raw route: ${(error as Error).message}`,
       );
@@ -190,6 +199,8 @@ export class OsrmService {
     points: { lng: number; lat: number; timestamp: number }[],
   ): Promise<{ lat: number; lng: number } | null> {
     if (points.length < 2) return null;
+
+    this.assertCoordinatesInRegion(points.map(({ lng, lat }) => [lng, lat]));
 
     if (this.configService.get('OSRM_ENABLED', 'true') === 'false') {
       return null;
@@ -226,7 +237,10 @@ export class OsrmService {
 
       const body = (await response.json()) as {
         matchings?: Array<{ geometry?: { coordinates?: number[][] } }>;
-        tracepoints?: Array<{ location?: [number, number] } | null>;
+        tracepoints?: Array<{
+          location?: [number, number];
+          distance?: number;
+        } | null>;
       };
 
       // Use the tracepoint for the LAST input point — this is the snapped current position
@@ -237,15 +251,51 @@ export class OsrmService {
       for (let i = tracepoints.length - 1; i >= 0; i--) {
         const tp = tracepoints[i];
         if (tp?.location) {
+          if ((tp.distance ?? 0) > this.getMaxSnapDistance()) return null;
           return { lng: tp.location[0], lat: tp.location[1] };
         }
       }
 
       return null;
     } catch (error) {
+      if (error instanceof BadRequestException) throw error;
       this.logger.debug(`OSRM Match failed (non-fatal): ${(error as Error).message}`);
       return null;
     }
+  }
+
+  private assertCoordinatesInRegion(coordinates: Position[]): void {
+    const region = this.getRegion();
+    const polygon = OSRM_REGIONS[region];
+    const invalid = coordinates.find(
+      ([lng, lat]) => !booleanPointInPolygon(point([lng, lat]), polygon),
+    );
+
+    if (invalid) {
+      throw new BadRequestException(
+        `Coordinate ${invalid[1]},${invalid[0]} is outside OSRM region ${region}`,
+      );
+    }
+  }
+
+  private assertSnapDistances(waypoints?: Array<{ distance?: number }>): void {
+    const maxDistance = this.getMaxSnapDistance();
+    if (waypoints?.some(({ distance = 0 }) => distance > maxDistance)) {
+      throw new BadRequestException(`Route is more than ${maxDistance}m from the road network`);
+    }
+  }
+
+  private getRegion(): OsrmRegion {
+    const region = this.configService.get<string>('OSRM_REGION', 'java');
+    if (region === 'java' || region === 'east-java') return region;
+    throw new Error(`Unsupported OSRM_REGION: ${region}`);
+  }
+
+  private getMaxSnapDistance(): number {
+    return this.configService.get<number>(
+      'OSRM_MAX_SNAP_DISTANCE_METERS',
+      this.maxSnapDistanceMeters,
+    );
   }
 
   private getProfile(_category: EventCategory): string {
