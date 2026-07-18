@@ -13,7 +13,7 @@ command -v curl >/dev/null || { echo "curl is required"; exit 1; }
 mkdir -p "$WORK_DIR"
 docker volume create "$VOLUME" >/dev/null
 
-if docker run --rm -v "$VOLUME:/data" "$OSRM_IMAGE" test -f /data/java.osrm; then
+if docker run --rm -v "$VOLUME:/data" "$OSRM_IMAGE" test -f /data/java.osrm.cell_metrics; then
   echo "OSRM graph already exists in volume $VOLUME."
   echo "Set FORCE_OSRM_REBUILD=1 to rebuild it."
   [ "${FORCE_OSRM_REBUILD:-0}" = "1" ] || exit 0
@@ -34,6 +34,7 @@ docker run --rm \
   --memory 5g --memory-swap 12g --cpus 4 \
   -v "$VOLUME:/data" "$OSRM_IMAGE" osrm-customize /data/java.osrm
 
-docker run --rm -v "$VOLUME:/data" "$OSRM_IMAGE" test -f /data/java.osrm
+docker run --rm -v "$VOLUME:/data" "$OSRM_IMAGE" \
+  sh -c 'test -f /data/java.osrm.partition && test -f /data/java.osrm.cells && test -f /data/java.osrm.cell_metrics'
 rm -f "$PBF"
 echo "OSRM bicycle graph ready in Docker volume: $VOLUME"
