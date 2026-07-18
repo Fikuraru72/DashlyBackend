@@ -2,6 +2,8 @@ import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import Redis, { Redis as RedisClient } from 'ioredis';
 
+import { getRedisOptions } from './redis-options';
+
 /**
  * RedisService — DUMB CACHE ONLY.
  *
@@ -21,10 +23,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   constructor(private configService: ConfigService) {}
 
   onModuleInit() {
-    this.redisClient = new Redis({
-      host: this.configService.get<string>('REDIS_HOST') || 'localhost',
-      port: this.configService.get<number>('REDIS_PORT') || 6379,
-    });
+    this.redisClient = new Redis(getRedisOptions(this.configService));
     this.redisClient.on('error', (err) => this.logger.error('Redis connection error', err));
   }
 

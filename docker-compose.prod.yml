@@ -3,6 +3,7 @@ x-backend-environment: &backend-environment
   NODE_OPTIONS: --max-old-space-size=512
   REDIS_HOST: redis
   REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
   MQTT_HOST: mosquitto
   MQTT_PORT: 1883
   OSRM_ENABLED: 'true'
@@ -108,6 +109,8 @@ services:
     image: redis:8.8.0-alpine
     command:
       - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
       - --appendonly
       - 'yes'
       - --appendfsync
@@ -120,10 +123,12 @@ services:
       - warning
     volumes:
       - redis_data:/data
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ['CMD-SHELL', 'redis-cli -a "$${REDIS_PASSWORD}" ping | grep -q PONG']
       interval: 10s
       timeout: 3s
       retries: 5
@@ -169,8 +174,13 @@ services:
 
   mosquitto:
     image: eclipse-mosquitto:2.0.22
+    configs:
+      - source: mosquitto_config
+        target: /mosquitto/config/mosquitto.conf
+        uid: '1883'
+        gid: '1883'
+        mode: 0444
     volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     security_opt:
@@ -195,6 +205,10 @@ services:
           memory: 96M
     networks:
       - dashly-network
+
+configs:
+  mosquitto_config:
+    file: ./mosquitto.conf
 
 networks:
   dashly-network:

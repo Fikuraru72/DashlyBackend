@@ -5,6 +5,8 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
 import { Server, ServerOptions } from 'socket.io';
 
+import { getRedisOptions } from '../modules/redis/redis-options';
+
 export class RedisIoAdapter extends IoAdapter {
   private pubClient: Redis | null;
   private subClient: Redis | null;
@@ -12,10 +14,7 @@ export class RedisIoAdapter extends IoAdapter {
   constructor(app: INestApplicationContext) {
     super(app);
     const config = app.get(ConfigService);
-    this.pubClient = new Redis({
-      host: config.get<string>('REDIS_HOST') || 'localhost',
-      port: config.get<number>('REDIS_PORT') || 6379,
-    });
+    this.pubClient = new Redis(getRedisOptions(config));
     this.subClient = this.pubClient.duplicate();
   }
 

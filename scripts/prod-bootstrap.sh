@@ -32,6 +32,7 @@ fi
 
 cat >/etc/sysctl.d/99-dashly.conf <<'EOF'
 vm.swappiness=10
+vm.overcommit_memory=1
 fs.inotify.max_user_watches=524288
 net.core.somaxconn=4096
 EOF

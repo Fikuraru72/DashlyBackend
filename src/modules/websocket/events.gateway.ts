@@ -14,6 +14,8 @@ import {
 import { and, eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import Redis from 'ioredis';
+
+import { getRedisOptions } from '../redis/redis-options';
 import { Server, Socket } from 'socket.io';
 
 import { DB_CONNECTION } from '../../db/database.module';
@@ -41,10 +43,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     configService: ConfigService,
     @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
   ) {
-    this.redis = new Redis({
-      host: configService.get<string>('REDIS_HOST') || 'localhost',
-      port: configService.get<number>('REDIS_PORT') || 6379,
-    });
+    this.redis = new Redis(getRedisOptions(configService));
     this.emitter = new Emitter(this.redis);
   }
 
