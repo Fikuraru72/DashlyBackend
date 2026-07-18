@@ -10,6 +10,7 @@ import { StreamModule } from '../stream/stream.module';
 import { DatabaseModule } from '../../db/database.module';
 import { WebSocketModule } from '../websocket/websocket.module';
 import { RedisModule } from '../redis/redis.module';
+import { EventsModule } from '../events/events.module';
 
 // Phase 1 Intelligence
 import { ProgressEngine } from './intelligence/progress.engine';
@@ -18,7 +19,7 @@ import { OffRouteEngine } from './intelligence/offroute.engine';
 import { StopDetectorEngine } from './intelligence/stopdetector.engine';
 
 @Module({
-  imports: [StreamModule, DatabaseModule, WebSocketModule, RedisModule],
+  imports: [StreamModule, DatabaseModule, WebSocketModule, RedisModule, EventsModule],
   controllers: [],
   providers: [
     TrackingEnrichmentConsumer,

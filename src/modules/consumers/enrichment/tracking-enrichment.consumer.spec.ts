@@ -34,6 +34,7 @@ describe('TrackingEnrichmentConsumer participant serialization', () => {
         {} as never,
         {} as never,
         {} as never,
+        {} as never,
       ) as unknown as ConsumerInternals;
 
     const replicas = [createConsumer(), createConsumer()];

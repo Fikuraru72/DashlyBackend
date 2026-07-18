@@ -23,6 +23,7 @@ import { RankingEngine } from '../intelligence/ranking.engine';
 import { OffRouteEngine } from '../intelligence/offroute.engine';
 import { StopDetectorEngine } from '../intelligence/stopdetector.engine';
 import { EventsGateway } from '../../websocket/events.gateway';
+import { OsrmService } from '../../events/osrm.service';
 
 /**
  * TrackingEnrichmentConsumer — HARDENED (Phase 1.5).
@@ -67,6 +68,7 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
     private readonly stopDetector: StopDetectorEngine,
     private readonly wsGateway: EventsGateway,
     private readonly configService: ConfigService,
+    private readonly osrmService: OsrmService,
     @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
   ) {}
 
@@ -233,8 +235,26 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
     const route = await this.getRoute(eventId);
     if (route) {
       this.logger.debug(`[Consumer] Route found for event ${eventId}, processing intelligence.`);
-      // Engine A: Progress (hardened — graduated snap fallback)
-      const progressResult = await this.progressEngine.compute(event, route);
+      // Engine A: route progress + road-network map matching for display.
+      await this.redisService.pushTrajectoryPoint(participantId, lng, lat, capturedAtMs);
+      const [progressResult, roadMatchedPosition] = await Promise.all([
+        this.progressEngine.compute(event, route),
+        this.redisService
+          .getTrajectoryBuffer(participantId)
+          .then((trajectory) => this.osrmService.matchTrajectory(trajectory)),
+      ]);
+      if (
+        roadMatchedPosition &&
+        this.calculateHaversineDistance(
+          progressResult.snappedLat,
+          progressResult.snappedLng,
+          roadMatchedPosition.lat,
+          roadMatchedPosition.lng,
+        ) <= 50
+      ) {
+        progressResult.snappedLat = roadMatchedPosition.lat;
+        progressResult.snappedLng = roadMatchedPosition.lng;
+      }
 
       // Engine B: Off-Route (hardened — cooldown, dynamic threshold, speed gate)
       let offRouteResult = {

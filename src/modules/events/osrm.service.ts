@@ -200,26 +200,36 @@ export class OsrmService {
   ): Promise<{ lat: number; lng: number } | null> {
     if (points.length < 2) return null;
 
-    this.assertCoordinatesInRegion(points.map(({ lng, lat }) => [lng, lat]));
+    const orderedPoints = points
+      .filter((point) => Number.isFinite(point.timestamp))
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .filter(
+        (point, index, all) =>
+          index === 0 ||
+          Math.round(point.timestamp / 1000) > Math.round(all[index - 1].timestamp / 1000),
+      );
+    if (orderedPoints.length < 2) return null;
+
+    this.assertCoordinatesInRegion(orderedPoints.map(({ lng, lat }) => [lng, lat]));
 
     if (this.configService.get('OSRM_ENABLED', 'true') === 'false') {
       return null;
     }
 
     try {
-      const coordinatePath = points.map((p) => `${p.lng},${p.lat}`).join(';');
+      const coordinatePath = orderedPoints.map((p) => `${p.lng},${p.lat}`).join(';');
 
-      // Timestamps help OSRM weight the HMM transitions by speed
-      const timestamps = points.map((p) => Math.round(p.timestamp / 1000));
+      // Timestamps help OSRM weight the HMM transitions by speed.
+      const timestamps = orderedPoints.map((p) => Math.round(p.timestamp / 1000));
       const timestampParam = timestamps.join(';');
 
       // radiuses: per-point GPS accuracy tolerance in meters (15m is reasonable for smartphones)
-      const radiuses = points.map(() => '15').join(';');
+      const radiuses = orderedPoints.map(() => '15').join(';');
 
       const profile = this.configService.get<string>('OSRM_PROFILE', 'bike');
       const url =
         `${this.getBaseUrl()}/match/v1/${profile}/${coordinatePath}` +
-        `?overview=false&geometries=geojson&timestamps=${timestampParam}&radiuses=${radiuses}`;
+        `?overview=false&geometries=geojson&timestamps=${timestampParam}&radiuses=${radiuses}&tidy=true`;
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 2000); // 2s timeout (tight for live tracking)
@@ -236,12 +246,15 @@ export class OsrmService {
       }
 
       const body = (await response.json()) as {
-        matchings?: Array<{ geometry?: { coordinates?: number[][] } }>;
+        matchings?: Array<{ confidence?: number; geometry?: { coordinates?: number[][] } }>;
         tracepoints?: Array<{
           location?: [number, number];
           distance?: number;
         } | null>;
       };
+
+      // Low-confidence matches can jump to a parallel road; keep the route projection fallback.
+      if ((body.matchings?.[0]?.confidence ?? 0) < 0.5) return null;
 
       // Use the tracepoint for the LAST input point — this is the snapped current position
       const tracepoints = body.tracepoints;
