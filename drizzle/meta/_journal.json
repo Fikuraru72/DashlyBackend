@@ -22,6 +22,13 @@
       "when": 1784289600000,
       "tag": "0002_event_participant_bib_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784390400000,
+      "tag": "0003_altitude_tracking",
+      "breakpoints": true
     }
   ]
 }

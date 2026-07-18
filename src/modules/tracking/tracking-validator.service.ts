@@ -68,7 +68,10 @@ export class TrackingValidatorService {
         lat: p.lat,
         lng: p.lng,
         speed: p.speed || 0,
-        battery: p.battery || 100,
+        battery:
+          p.battery != null && !isNaN(parseInt(p.battery as string))
+            ? parseInt(p.battery as string)
+            : undefined,
         capturedAt: p.captured_at || null,
         status: 'sync',
       };
@@ -96,6 +99,10 @@ export class TrackingValidatorService {
 
       lat: parseFloat(raw.lat as string),
       lng: parseFloat(raw.lng as string),
+      altitude:
+        raw.altitude != null && !isNaN(parseFloat(raw.altitude as string))
+          ? parseFloat(raw.altitude as string)
+          : undefined,
       speedFromClient: parseFloat(raw.speed as string) || 0,
 
       // Enrichment consumer will populate these
@@ -115,7 +122,10 @@ export class TrackingValidatorService {
         isLate: false,
       },
 
-      battery: parseInt(raw.battery as string) || 100,
+      battery:
+        raw.battery != null && !isNaN(parseInt(raw.battery as string))
+          ? parseInt(raw.battery as string)
+          : undefined,
       clientStatus: raw.status || 'moving',
       gatekeeperAction: 'VALID', // Default; enrichment may change to ANOMALY/LATE
     };

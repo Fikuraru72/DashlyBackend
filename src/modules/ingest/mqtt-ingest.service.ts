@@ -90,50 +90,6 @@ export class MqttIngestService implements OnModuleInit, OnModuleDestroy {
       const payloadStr = message.toString();
       if (!payloadStr) return;
 
-      if (topic.endsWith('/loc')) {
-        const payload = JSON.parse(payloadStr);
-        const raw: RawIngestPayload = {
-          eventId,
-          participantId,
-          userId,
-          msgId: payload.msg_id,
-          lat: payload.lat,
-          lng: payload.lng,
-          speed: payload.speed,
-          battery: payload.battery,
-          capturedAt: payload.captured_at,
-          status: payload.status,
-        };
-        if (!raw.msgId) {
-          this.logger.warn(`[Ingest] Missing msg_id. Dropping.`);
-          return;
-        }
-
-        const latNum = parseFloat(raw.lat as string);
-        const lngNum = parseFloat(raw.lng as string);
-
-        if (isNaN(latNum) || isNaN(lngNum)) {
-          this.logger.warn(
-            `[Ingest] Invalid coordinates: lat=${raw.lat}, lng=${raw.lng}. Dropping.`,
-          );
-          return;
-        }
-        await this.validator.processLocation(raw);
-        return;
-      }
-
-      if (topic.endsWith('/sync')) {
-        const points = JSON.parse(payloadStr);
-        if (Array.isArray(points)) {
-          await this.validator.processSyncBatch(eventId, participantId, userId, points);
-        } else {
-          this.logger.warn(
-            `[Ingest] Invalid /sync payload (not an array) for participant ${participantId}`,
-          );
-        }
-        return;
-      }
-
       const payload = JSON.parse(payloadStr);
       const raw: RawIngestPayload = {
         eventId,

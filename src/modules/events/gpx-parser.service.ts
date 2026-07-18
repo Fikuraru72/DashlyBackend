@@ -9,6 +9,14 @@ export interface ParsedGpxResult {
   totalElevationMeters: number;
   startPoint: { lat: number; lng: number } | null;
   finishPoint: { lat: number; lng: number } | null;
+  altitudeProfile?: Array<{
+    distance: number;
+    elevation: number;
+    lat: number;
+    lng: number;
+    cumGain: number;
+    cumLoss: number;
+  }>;
 }
 
 @Injectable()
@@ -54,6 +62,22 @@ export class GpxParserService {
 
       let totalDistance = 0;
       let totalElevation = 0;
+      let cumGain = 0;
+      let cumLoss = 0;
+
+      const altitudeProfile: any[] = [];
+
+      // Add the starting point to altitude profile
+      if (coordinates.length > 0) {
+        altitudeProfile.push({
+          distance: 0,
+          elevation: coordinates[0].length > 2 ? coordinates[0][2] : 0,
+          lat: coordinates[0][1],
+          lng: coordinates[0][0],
+          cumGain: 0,
+          cumLoss: 0,
+        });
+      }
 
       for (let i = 1; i < coordinates.length; i++) {
         const prev = coordinates[i - 1];
@@ -67,8 +91,20 @@ export class GpxParserService {
           const eleDiff = curr[2] - prev[2];
           if (eleDiff > 0) {
             totalElevation += eleDiff; // Cumulative elevation gain
+            cumGain += eleDiff;
+          } else {
+            cumLoss += Math.abs(eleDiff);
           }
         }
+
+        altitudeProfile.push({
+          distance: Math.round(totalDistance),
+          elevation: curr.length > 2 ? curr[2] : 0,
+          lat: curr[1],
+          lng: curr[0],
+          cumGain: Math.round(cumGain),
+          cumLoss: Math.round(cumLoss),
+        });
       }
 
       const startPoint = { lat: coordinates[0][1], lng: coordinates[0][0] };
@@ -81,6 +117,7 @@ export class GpxParserService {
         totalElevationMeters: Math.round(totalElevation),
         startPoint,
         finishPoint,
+        altitudeProfile,
       };
     } catch (error: any) {
       if (error instanceof BadRequestException) throw error;

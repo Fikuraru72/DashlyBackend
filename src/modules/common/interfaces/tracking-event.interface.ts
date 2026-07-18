@@ -19,6 +19,7 @@ export interface TrackingEvent {
   // ─── Geospatial ─────────────────────────────────────────────
   lat: number;
   lng: number;
+  altitude?: number;
   speedFromClient: number;
 
   // ─── Enriched by EnrichmentConsumer ──────────────────────────
@@ -37,7 +38,7 @@ export interface TrackingEvent {
   flags: TrackingEventFlags;
 
   // ─── Metadata ───────────────────────────────────────────────
-  battery: number;
+  battery?: number;
   /** Raw status string from the mobile client ('moving', etc.). */
   clientStatus: string;
   /**
@@ -95,6 +96,12 @@ export interface IntelligenceResult {
   score: number;
   /** Participant state after intelligence processing. */
   participantState: string;
+  /** Cumulative elevation gain (metres). */
+  elevationGain?: number;
+  /** Minimum altitude recorded (metres). */
+  minAltitude?: number;
+  /** Maximum altitude recorded (metres). */
+  maxAltitude?: number;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -133,8 +140,9 @@ export interface RawIngestPayload {
   msgId: string;
   lat: string | number;
   lng: string | number;
+  altitude?: string | number;
   speed: string | number;
-  battery: string | number;
+  battery?: string | number;
   capturedAt: string | null;
   status: string;
 }

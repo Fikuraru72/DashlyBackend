@@ -111,7 +111,8 @@ export class EventsService {
           dateEvent: new Date(dto.dateEvent),
           routeGeojson: normalizedRoute?.geoJson ?? dto.routeGeojson,
           totalDistanceMeters: normalizedRoute?.totalDistanceMeters ?? dto.totalDistanceMeters,
-          totalElevationMeters: dto.totalElevationMeters,
+          totalElevationMeters: normalizedRoute?.totalElevationMeters ?? dto.totalElevationMeters,
+          altitudeProfile: normalizedRoute?.altitudeProfile,
           startTime: new Date(dto.startTime),
           endTime: new Date(dto.endTime),
           registrationOpen: dto.registrationOpen ? new Date(dto.registrationOpen) : null,
@@ -414,6 +415,12 @@ export class EventsService {
       updateData.routeGeojson = normalizedRoute?.geoJson ?? dto.routeGeojson;
       if (normalizedRoute) {
         updateData.totalDistanceMeters = normalizedRoute.totalDistanceMeters;
+        if (normalizedRoute.altitudeProfile) {
+          updateData.altitudeProfile = normalizedRoute.altitudeProfile;
+        }
+        if (normalizedRoute.totalElevationMeters !== undefined) {
+          updateData.totalElevationMeters = normalizedRoute.totalElevationMeters;
+        }
       }
     }
     if (dto.category !== undefined) updateData.category = dto.category;
@@ -829,10 +836,72 @@ export class EventsService {
       `[Events] Participant (User ${userId}) state changed: ${participant.participantState} → ${newState}`,
     );
 
+    await this.redisService.setParticipantStateOnly(eventId, participant.id, newState);
+
     return {
       success: true,
       data: updated,
       message: `Participant state updated to ${newState}`,
+    };
+  }
+
+  async deleteAnomaly(eventId: number, anomalyId: number) {
+    const [deleted] = await this.db
+      .delete(schema.anomalies)
+      .where(and(eq(schema.anomalies.id, anomalyId), eq(schema.anomalies.eventId, eventId)))
+      .returning();
+
+    if (!deleted) {
+      throw new NotFoundException('Anomaly not found');
+    }
+
+    return { success: true, data: deleted };
+  }
+
+  async deleteAnomalyByType(eventId: number, userId: number, type: string) {
+    const [deleted] = await this.db
+      .delete(schema.anomalies)
+      .where(
+        and(
+          eq(schema.anomalies.userId, userId),
+          eq(schema.anomalies.eventId, eventId),
+          eq(schema.anomalies.type, type),
+        ),
+      )
+      .returning();
+
+    return { success: true, data: deleted };
+  }
+
+  async getMyLiveStats(eventId: number, user: any) {
+    const userId = user.id || user.sub;
+
+    const participant = await this.db.query.eventParticipants.findFirst({
+      where: and(
+        eq(schema.eventParticipants.eventId, eventId),
+        eq(schema.eventParticipants.userId, userId),
+      ),
+    });
+
+    if (!participant) {
+      throw new NotFoundException('Not joined');
+    }
+
+    const allRankings = await this.redisService.getAllRankings(eventId);
+    let rank: number | null = allRankings.findIndex((r) => r.participantId === participant.id) + 1;
+    if (rank === 0) rank = null;
+
+    const progress = await this.redisService.getProgressState(eventId, participant.id);
+
+    return {
+      success: true,
+      data: {
+        rank,
+        progressPercentage: progress?.progressPercentage ?? 0,
+        distanceCovered: progress?.distanceCovered ?? 0,
+        checkpointsCompleted: progress?.checkpointsCompleted ?? 0,
+        participantState: participant.participantState,
+      },
     };
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis, { Redis as RedisClient } from 'ioredis';
 
@@ -15,6 +15,7 @@ import Redis, { Redis as RedisClient } from 'ioredis';
  */
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(RedisService.name);
   private redisClient!: RedisClient;
 
   constructor(private configService: ConfigService) {}
@@ -24,6 +25,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       host: this.configService.get<string>('REDIS_HOST') || 'localhost',
       port: this.configService.get<number>('REDIS_PORT') || 6379,
     });
+    this.redisClient.on('error', (err) => this.logger.error('Redis connection error', err));
   }
 
   async onModuleDestroy() {
@@ -90,9 +92,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     state: {
       lat: number;
       lng: number;
+      altitude?: number;
       speed: number;
       isOffline: boolean;
       capturedAt: number; // epoch ms
+      elevationGain: number;
+      minAltitude: number;
+      maxAltitude: number;
     },
   ): Promise<void> {
     const geoKey = `current_positions:${eventId}`;
@@ -103,6 +109,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     pipeline.hset(statsKey, {
       lat: state.lat.toString(),
       lng: state.lng.toString(),
+      ...(state.altitude != null && { altitude: state.altitude.toString() }),
+      elevation_gain: state.elevationGain.toString(),
+      min_altitude: state.minAltitude.toString(),
+      max_altitude: state.maxAltitude.toString(),
       speed: state.speed.toString(),
       isOffline: state.isOffline ? 'true' : 'false',
       captured_at: state.capturedAt.toString(),
@@ -127,6 +137,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       participantState: 'TRACKING',
     });
     await this.redisClient.expire(statsKey, 60);
+  }
+
+  async setParticipantStateOnly(
+    eventId: number,
+    participantId: number,
+    state: string,
+  ): Promise<void> {
+    const statsKey = `participant_stats:${participantId}`;
+    await this.redisClient.hset(statsKey, 'participantState', state);
   }
 
   // ═══════════════════════════════════════════════════════════════

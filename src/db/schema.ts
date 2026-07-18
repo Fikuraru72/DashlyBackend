@@ -86,6 +86,7 @@ export const events = pgTable('events', {
   totalDistanceMeters: integer('total_distance_meters'),
   totalElevationMeters: integer('total_elevation_meters'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  altitudeProfile: jsonb('altitude_profile'), // Array of { distance, elevation, lat, lng, cumGain, cumLoss }
   deletedAt: timestamp('deleted_at'),
 });
 
@@ -112,6 +113,7 @@ export const locationLogs = pgTable(
       .notNull(),
     latitude: doublePrecision('latitude').notNull(),
     longitude: doublePrecision('longitude').notNull(),
+    altitude: doublePrecision('altitude'),
     speed: doublePrecision('speed'),
     distanceDelta: doublePrecision('distance_delta'), // meters from last point
     speedCalculated: doublePrecision('speed_calculated'), // m/s from haversine
