@@ -98,6 +98,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       elevationGain: number;
       minAltitude: number;
       maxAltitude: number;
+      routeIndex?: number;
+      routeDistance?: number;
+      routeElevation?: number;
     },
   ): Promise<void> {
     const geoKey = `current_positions:${eventId}`;
@@ -117,6 +120,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       captured_at: state.capturedAt.toString(),
       last_seen: new Date().toISOString(),
       last_moved: new Date().toISOString(),
+      ...(state.routeIndex != null && { routeIndex: state.routeIndex.toString() }),
+      ...(state.routeDistance != null && { routeDistance: state.routeDistance.toString() }),
+      ...(state.routeElevation != null && { routeElevation: state.routeElevation.toString() }),
     });
     pipeline.expire(statsKey, 60);
     pipeline.expire(geoKey, 86400);

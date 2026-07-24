@@ -460,6 +460,9 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
       elevationGain,
       minAltitude: minAltitude === 9999 ? 0 : minAltitude,
       maxAltitude: maxAltitude === -9999 ? 0 : maxAltitude,
+      routeIndex: event.intelligence?.routeIndex,
+      routeDistance: event.intelligence?.routeDistance,
+      routeElevation: event.intelligence?.routeElevation,
     });
 
     const statsKey = `participant_stats:${participantId}`;
