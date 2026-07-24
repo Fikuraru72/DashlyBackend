@@ -31,6 +31,9 @@ export class ProgressEngine {
     snappedLat: number;
     snappedLng: number;
     lastSegmentIdx: number;
+    routeIndex: number;
+    routeDistance: number;
+    routeElevation: number;
     checkpointsCompleted: number;
     backwardMovement: boolean;
     isFinished: boolean;
@@ -81,6 +84,9 @@ export class ProgressEngine {
               ? parseFloat(prevState.snappedLng)
               : route.coordinates[0][0],
             lastSegmentIdx,
+            routeIndex: lastSegmentIdx,
+            routeDistance: prevState.routeDistance ? parseFloat(prevState.routeDistance) : 0,
+            routeElevation: prevState.routeElevation ? parseFloat(prevState.routeElevation) : 0,
             checkpointsCompleted: prevCheckpoints,
             backwardMovement: false,
             isFinished: false,
@@ -103,6 +109,16 @@ export class ProgressEngine {
     const segmentLength =
       route.cumulativeDistances[bestSegIdx + 1] - route.cumulativeDistances[bestSegIdx];
     const distAlongRoute = route.cumulativeDistances[bestSegIdx] + segmentLength * bestFraction;
+
+    const routeIndex = bestSegIdx;
+    const routeDistance = Math.round(distAlongRoute * 100) / 100;
+
+    let routeElevation = 0;
+    if (route.altitudeProfile && route.altitudeProfile.length > bestSegIdx) {
+      const p1Elev = route.altitudeProfile[bestSegIdx]?.elevation ?? 0;
+      const p2Elev = route.altitudeProfile[bestSegIdx + 1]?.elevation ?? p1Elev;
+      routeElevation = Math.round((p1Elev + (p2Elev - p1Elev) * bestFraction) * 100) / 100;
+    }
 
     let progressPercentage = (distAlongRoute / route.totalDistance) * 100;
     progressPercentage = Math.max(0, Math.min(100, progressPercentage));
@@ -130,6 +146,9 @@ export class ProgressEngine {
       snappedLat: bestSnappedLat,
       snappedLng: bestSnappedLng,
       lastSegmentIdx: bestSegIdx,
+      routeIndex,
+      routeDistance,
+      routeElevation,
       checkpointsCompleted,
       backwardMovement,
       isFinished,

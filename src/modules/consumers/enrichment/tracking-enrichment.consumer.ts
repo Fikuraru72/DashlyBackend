@@ -424,6 +424,9 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
         distanceToFinish: progressResult.distanceToFinish,
         snappedLat: progressResult.snappedLat,
         snappedLng: progressResult.snappedLng,
+        routeIndex: progressResult.routeIndex,
+        routeDistance: progressResult.routeDistance,
+        routeElevation: progressResult.routeElevation,
         rank: rankResult.rank,
         totalParticipants: rankResult.totalParticipants,
         offRoute: offRouteResult.offRoute,
@@ -550,7 +553,10 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
     }
 
     const [eventRow] = await this.db
-      .select({ routeGeojson: schema.events.routeGeojson })
+      .select({
+        routeGeojson: schema.events.routeGeojson,
+        altitudeProfile: schema.events.altitudeProfile,
+      })
       .from(schema.events)
       .where(eq(schema.events.id, eventId));
 
@@ -604,6 +610,7 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
       cumulativeDistances,
       totalDistance: totalDist,
       segmentCount: coordinates.length - 1,
+      altitudeProfile: eventRow?.altitudeProfile ? (eventRow.altitudeProfile as any) : undefined,
     };
 
     await this.redisService.setCachedRoute(eventId, JSON.stringify(processedRoute));

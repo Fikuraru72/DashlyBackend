@@ -80,6 +80,12 @@ export interface IntelligenceResult {
   /** Closest point on the route (snapped). */
   snappedLat: number;
   snappedLng: number;
+  /** Index of closest route coordinate. */
+  routeIndex?: number;
+  /** Cumulative distance along route in metres. */
+  routeDistance?: number;
+  /** Route profile elevation at current position in metres. */
+  routeElevation?: number;
   /** 1-based rank among active participants. */
   rank: number;
   /** Total tracked participants in the ranking set. */
@@ -118,6 +124,15 @@ export interface ProcessedRoute {
   totalDistance: number;
   /** Number of line segments (coordinates.length - 1). */
   segmentCount: number;
+  /** Optional elevation profile array from OSRM / DEM. */
+  altitudeProfile?: Array<{
+    distance: number;
+    elevation: number;
+    lat: number;
+    lng: number;
+    cumGain: number;
+    cumLoss: number;
+  }>;
 }
 
 // ─── SOS Event (fast-path — bypasses the queue) ──────────────────

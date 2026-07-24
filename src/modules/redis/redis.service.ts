@@ -249,6 +249,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       snappedLat: number;
       snappedLng: number;
       lastSegmentIdx: number;
+      routeIndex?: number;
+      routeDistance?: number;
+      routeElevation?: number;
       checkpointsCompleted: number;
     },
   ): Promise<void> {
@@ -259,6 +262,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       snappedLat: state.snappedLat.toString(),
       snappedLng: state.snappedLng.toString(),
       lastSegmentIdx: state.lastSegmentIdx.toString(),
+      routeIndex: (state.routeIndex ?? state.lastSegmentIdx).toString(),
+      routeDistance: (state.routeDistance ?? 0).toString(),
+      routeElevation: (state.routeElevation ?? 0).toString(),
       checkpointsCompleted: state.checkpointsCompleted.toString(),
     });
     await this.redisClient.expire(key, 60);
