@@ -12,7 +12,7 @@ import {
   BadRequestException,
   Res,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { EventsService } from './events.service';
 import { GpxParserService } from './gpx-parser.service';

@@ -13,6 +13,7 @@ export class DbWriterConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DbWriterConsumer.name);
   private worker!: Worker;
   private workerConnection!: Redis;
+  private buffer: TrackingEvent[] = [];
 
   constructor(
     private readonly stream: TrackingStreamService,
@@ -34,6 +35,33 @@ export class DbWriterConsumer implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy() {
     await this.worker?.close();
     await this.workerConnection?.quit();
+  }
+
+  private async persist(event: TrackingEvent): Promise<void> {
+    const mapped = {
+      messageId: event.messageId,
+      userId: event.userId,
+      participantId: event.participantId,
+      eventId: event.eventId,
+      latitude: event.intelligence?.snappedLat ?? event.lat,
+      longitude: event.intelligence?.snappedLng ?? event.lng,
+      altitude: event.altitude,
+      speed: event.speedFromClient,
+      battery: event.battery ?? null,
+      distanceDelta: event.distanceDelta,
+      speedCalculated: event.speedCalculated,
+      isAnomaly: event.flags.isAnomaly,
+      isOffline: event.flags.isOffline,
+      capturedAt: new Date(event.capturedAt),
+      serverReceivedAt: new Date(event.serverReceivedAt),
+    };
+
+    await this.db
+      .insert(schema.locationLogs)
+      .values(mapped)
+      .onConflictDoNothing({ target: [schema.locationLogs.messageId] });
+
+    this.logger.debug(`[DB Writer] ✅ Persisted location log ${event.messageId}`);
   }
 
   private async flush(): Promise<void> {
