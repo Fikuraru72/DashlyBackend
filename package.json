@@ -82,7 +82,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
-    "vite-plus": "^0.2.4",
+    "vite-plus": "0.2.4",
     "vitest": "^4.1.10"
   },
   "devEngines": {
