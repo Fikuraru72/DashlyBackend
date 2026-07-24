@@ -17,6 +17,7 @@ ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/src ./src
 COPY --from=build /app/drizzle.config.ts /app/package.json ./
 
 USER bun
