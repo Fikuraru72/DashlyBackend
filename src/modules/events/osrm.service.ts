@@ -279,10 +279,7 @@ export class OsrmService {
    * Snap a single GPS point to the nearest OSRM road coordinate (/nearest/v1).
    * Guaranteed to work even for single points or trajectory gaps.
    */
-  async snapNearest(
-    lat: number,
-    lng: number,
-  ): Promise<{ lat: number; lng: number } | null> {
+  async snapNearest(lat: number, lng: number): Promise<{ lat: number; lng: number } | null> {
     if (this.configService.get('OSRM_ENABLED', 'true') === 'false') {
       return null;
     }
