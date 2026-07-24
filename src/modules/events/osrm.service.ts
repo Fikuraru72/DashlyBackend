@@ -256,22 +256,63 @@ export class OsrmService {
       // Accept matches with confidence >= 0.1
       if ((body.matchings?.[0]?.confidence ?? 0) < 0.1) return null;
 
-      // Use the tracepoint for the LAST input point — this is the snapped current position
       const tracepoints = body.tracepoints;
       if (!tracepoints || tracepoints.length === 0) return null;
 
-      // Find the last non-null tracepoint (OSRM may null-out unmatched points)
       for (let i = tracepoints.length - 1; i >= 0; i--) {
         const tp = tracepoints[i];
         if (tp?.location) {
-          if ((tp.distance ?? 0) > this.getMaxSnapDistance()) return null;
-          return { lng: tp.location[0], lat: tp.location[1] };
+          if ((tp.distance ?? 0) <= this.getMaxSnapDistance()) {
+            return { lng: tp.location[0], lat: tp.location[1] };
+          }
         }
       }
 
       return null;
     } catch (error) {
       this.logger.debug(`OSRM Match failed (non-fatal): ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Snap a single GPS point to the nearest OSRM road coordinate (/nearest/v1).
+   * Guaranteed to work even for single points or trajectory gaps.
+   */
+  async snapNearest(
+    lat: number,
+    lng: number,
+  ): Promise<{ lat: number; lng: number } | null> {
+    if (this.configService.get('OSRM_ENABLED', 'true') === 'false') {
+      return null;
+    }
+
+    try {
+      this.assertCoordinatesInRegion([[lng, lat]]);
+      const profile = this.getProfile('CYCLING');
+      const url = `${this.getBaseUrl()}/nearest/v1/${profile}/${lng},${lat}?number=1`;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'dashly-backend/1.0' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const body = (await response.json()) as {
+        waypoints?: Array<{ location?: [number, number]; distance?: number }>;
+      };
+
+      const wp = body.waypoints?.[0];
+      if (wp?.location && (wp.distance ?? 0) <= this.getMaxSnapDistance()) {
+        return { lng: wp.location[0], lat: wp.location[1] };
+      }
+      return null;
+    } catch {
       return null;
     }
   }

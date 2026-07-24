@@ -276,12 +276,15 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
       this.logger.debug(`[Consumer] Route found for event ${eventId}, processing intelligence.`);
       // Engine A: route progress + road-network map matching for display.
       await this.redisService.pushTrajectoryPoint(participantId, lng, lat, capturedAtMs);
-      const [progressResult, roadMatchedPosition] = await Promise.all([
-        this.progressEngine.compute(event, route),
-        this.redisService
-          .getTrajectoryBuffer(participantId)
-          .then((trajectory) => this.osrmService.matchTrajectory(trajectory)),
-      ]);
+      const trajectory = await this.redisService.getTrajectoryBuffer(participantId);
+      let roadMatchedPosition = await this.osrmService.matchTrajectory(trajectory);
+
+      // Fallback to single-point OSRM Nearest API if trajectory match failed or had <2 points
+      if (!roadMatchedPosition) {
+        roadMatchedPosition = await this.osrmService.snapNearest(lat, lng);
+      }
+
+      const progressResult = await this.progressEngine.compute(event, route);
       if (
         roadMatchedPosition &&
         this.calculateHaversineDistance(
