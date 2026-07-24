@@ -41,7 +41,10 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwtServiceMock },
         {
           provide: ConfigService,
-          useValue: { getOrThrow: vi.fn().mockReturnValue('client-id') },
+          useValue: {
+            getOrThrow: vi.fn().mockReturnValue('client-id'),
+            get: vi.fn().mockImplementation((key, fallback) => fallback || '7d'),
+          },
         },
       ],
     }).compile();
@@ -144,7 +147,7 @@ describe('AuthService', () => {
       expect(jwtServiceMock.sign).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({ tokenType: 'access' }),
-        { expiresIn: '15m' },
+        { expiresIn: '7d' },
       );
       expect(jwtServiceMock.sign).toHaveBeenNthCalledWith(
         2,
