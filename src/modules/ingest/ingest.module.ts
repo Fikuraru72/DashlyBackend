@@ -9,5 +9,6 @@ import { RedisModule } from '../redis/redis.module';
 @Module({
   imports: [TrackingModule, DatabaseModule, RedisModule],
   providers: [MqttIngestService, SosHandlerService, StatusHandlerService],
+  exports: [MqttIngestService],
 })
 export class IngestModule {}

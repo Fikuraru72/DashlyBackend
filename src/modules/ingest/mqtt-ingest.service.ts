@@ -72,6 +72,13 @@ export class MqttIngestService implements OnModuleInit, OnModuleDestroy {
     this.client?.end();
   }
 
+  /** Expose publish capability for broadcast services */
+  publish(topic: string, message: string, retain = false): void {
+    if (this.client && this.client.connected) {
+      this.client.publish(topic, message, { qos: 0, retain });
+    }
+  }
+
   private async handleMessage(topic: string, message: Buffer) {
     const fs = require('fs');
     fs.appendFileSync('mqtt_debug.log', `[DEBUG] topic: ${topic}\n`);
