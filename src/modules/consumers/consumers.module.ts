@@ -18,7 +18,6 @@ import { RankingEngine } from './intelligence/ranking.engine';
 import { OffRouteEngine } from './intelligence/offroute.engine';
 import { StopDetectorEngine } from './intelligence/stopdetector.engine';
 
-
 @Module({
   imports: [StreamModule, DatabaseModule, WebSocketModule, RedisModule, EventsModule],
   controllers: [],

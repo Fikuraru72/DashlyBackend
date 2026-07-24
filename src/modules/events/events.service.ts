@@ -980,13 +980,13 @@ export class EventsService {
 
     for (const log of logs) {
       if (!log.participantId) continue;
-      
+
       const pStats = participantMap.get(log.participantId);
       if (!pStats) continue;
 
       const capturedAt = new Date(log.capturedAt);
       const serverReceivedAt = new Date(log.serverReceivedAt);
-      
+
       const latencyMs = Math.max(0, serverReceivedAt.getTime() - capturedAt.getTime());
 
       rawSheet.addRow({
@@ -1016,11 +1016,13 @@ export class EventsService {
     for (const pStats of participantMap.values()) {
       if (pStats.totalPings === 0) continue;
 
-      const avgLatency = pStats.latencies.reduce((a: number, b: number) => a + b, 0) / pStats.latencies.length;
+      const avgLatency =
+        pStats.latencies.reduce((a: number, b: number) => a + b, 0) / pStats.latencies.length;
       const maxLatency = Math.max(...pStats.latencies);
-      const batteryDrain = (pStats.startBattery != null && pStats.endBattery != null) 
-        ? pStats.startBattery - pStats.endBattery 
-        : null;
+      const batteryDrain =
+        pStats.startBattery != null && pStats.endBattery != null
+          ? pStats.startBattery - pStats.endBattery
+          : null;
 
       summarySheet.addRow({
         bib: pStats.bib,

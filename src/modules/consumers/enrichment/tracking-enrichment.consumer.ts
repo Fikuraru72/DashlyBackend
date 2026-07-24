@@ -243,7 +243,8 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
       pointsToUse.forEach((e: any) => {
         const eLat = typeof e.lat === 'number' ? e.lat : parseFloat(e.lat);
         const eLng = typeof e.lng === 'number' ? e.lng : parseFloat(e.lng);
-        const eTs = typeof e.capturedAt === 'number' ? e.capturedAt : new Date(e.capturedAt).getTime();
+        const eTs =
+          typeof e.capturedAt === 'number' ? e.capturedAt : new Date(e.capturedAt).getTime();
         if (!isNaN(eLat) && !isNaN(eLng) && !isNaN(eTs)) {
           recentPoints.push({ lat: eLat, lng: eLng, timestamp: eTs });
         }
@@ -264,7 +265,9 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
       }
     } catch (osrmErr) {
       // Non-fatal: just use raw GPS
-      this.logger.warn(`[OSRM] matchTrajectory failed for participant ${participantId}: ${(osrmErr as Error).message}`);
+      this.logger.warn(
+        `[OSRM] matchTrajectory failed for participant ${participantId}: ${(osrmErr as Error).message}`,
+      );
     }
 
     // ── 6. Event Intelligence Layer (HARDENED) ───────────────────

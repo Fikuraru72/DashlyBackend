@@ -173,13 +173,13 @@ export class EventsController {
   @Roles('SUPER_ADMIN', 'STAFF')
   async getTelemetryReport(@Param('id') id: string, @Res() res: Response) {
     const buffer = await this.eventsService.generateTelemetryReport(+id);
-    
+
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename=telemetry-report-event-${id}.xlsx`,
       'Content-Length': buffer.byteLength,
     });
-    
+
     // We send a Buffer directly so Express will pipe it to the response
     res.end(Buffer.from(buffer));
   }

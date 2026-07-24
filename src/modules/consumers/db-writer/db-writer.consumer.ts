@@ -65,14 +65,9 @@ export class DbWriterConsumer implements OnModuleInit, OnModuleDestroy {
         .values(mapped)
         .onConflictDoNothing({ target: [schema.locationLogs.messageId] });
 
-      this.logger.log(
-        `[DB Writer] ✅ Batched ${mapped.length} location logs to PostgreSQL`,
-      );
+      this.logger.log(`[DB Writer] ✅ Batched ${mapped.length} location logs to PostgreSQL`);
     } catch (error) {
-      this.logger.error(
-        `[DB Writer] ❌ Batch insert failed (${batch.length} rows):`,
-        error,
-      );
+      this.logger.error(`[DB Writer] ❌ Batch insert failed (${batch.length} rows):`, error);
       // Re-add to buffer for next attempt (simple retry)
       this.buffer.unshift(...batch);
     }

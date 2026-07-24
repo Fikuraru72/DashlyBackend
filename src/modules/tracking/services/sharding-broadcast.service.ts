@@ -58,18 +58,30 @@ export class ShardingBroadcastService implements OnModuleInit, OnModuleDestroy {
 
           // Combine unique entries
           const map = new Map<number, { participantId: number; score: number; rank: number }>();
-          
+
           top3.forEach((r) => {
             const rRank = rankings.indexOf(r) + 1;
-            map.set(r.participantId, { participantId: r.participantId, score: r.score, rank: rRank });
+            map.set(r.participantId, {
+              participantId: r.participantId,
+              score: r.score,
+              rank: rRank,
+            });
           });
           ahead.forEach((r) => {
             const rRank = rankings.indexOf(r) + 1;
-            map.set(r.participantId, { participantId: r.participantId, score: r.score, rank: rRank });
+            map.set(r.participantId, {
+              participantId: r.participantId,
+              score: r.score,
+              rank: rRank,
+            });
           });
           behind.forEach((r) => {
             const rRank = rankings.indexOf(r) + 1;
-            map.set(r.participantId, { participantId: r.participantId, score: r.score, rank: rRank });
+            map.set(r.participantId, {
+              participantId: r.participantId,
+              score: r.score,
+              rank: rRank,
+            });
           });
 
           // Convert to lightweight array
