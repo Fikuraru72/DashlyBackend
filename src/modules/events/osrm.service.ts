@@ -210,13 +210,13 @@ export class OsrmService {
       );
     if (orderedPoints.length < 2) return null;
 
-    this.assertCoordinatesInRegion(orderedPoints.map(({ lng, lat }) => [lng, lat]));
-
     if (this.configService.get('OSRM_ENABLED', 'true') === 'false') {
       return null;
     }
 
     try {
+      this.assertCoordinatesInRegion(orderedPoints.map(({ lng, lat }) => [lng, lat]));
+
       const coordinatePath = orderedPoints.map((p) => `${p.lng},${p.lat}`).join(';');
 
       // Timestamps help OSRM weight the HMM transitions by speed.
@@ -271,7 +271,6 @@ export class OsrmService {
 
       return null;
     } catch (error) {
-      if (error instanceof BadRequestException) throw error;
       this.logger.debug(`OSRM Match failed (non-fatal): ${(error as Error).message}`);
       return null;
     }
