@@ -1,6 +1,7 @@
 x-backend-environment: &backend-environment
   NODE_ENV: production
   NODE_OPTIONS: --max-old-space-size=512
+  DATABASE_URL: postgresql://${POSTGRES_USER:-dashly}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dashly}
   REDIS_HOST: redis
   REDIS_PORT: 6379
   REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
@@ -27,9 +28,12 @@ services:
   app:
     <<: *backend-service
     depends_on:
-      - postgres
-      - redis
-      - osrm-bicycle
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      osrm-bicycle:
+        condition: service_started
     expose:
       - '3000'
     networks:
@@ -74,9 +78,12 @@ services:
     <<: *backend-service
     command: ['bun', 'dist/src/process.js', 'worker']
     depends_on:
-      - postgres
-      - redis
-      - osrm-bicycle
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      osrm-bicycle:
+        condition: service_started
     deploy:
       replicas: ${WORKER_REPLICAS:-2}
       restart_policy:
@@ -90,10 +97,14 @@ services:
     <<: *backend-service
     command: ['bun', 'dist/src/process.js', 'ingest']
     depends_on:
-      - postgres
-      - redis
-      - mosquitto
-      - osrm-bicycle
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+      osrm-bicycle:
+        condition: service_started
     deploy:
       replicas: 1
       restart_policy:
@@ -107,8 +118,10 @@ services:
     <<: *backend-service
     command: ['bun', 'dist/src/process.js', 'scheduler']
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     deploy:
       replicas: 1
       restart_policy:
@@ -119,7 +132,7 @@ services:
           memory: 256M
 
   redis:
-    image: redis:8.8.0-alpine
+    image: redis:7-alpine
     command:
       - redis-server
       - --requirepass
@@ -160,8 +173,8 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB:-dashly}
+      POSTGRES_USER: ${POSTGRES_USER:-dashly}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       TZ: Asia/Jakarta
     volumes:
@@ -169,13 +182,20 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dashly -d dashly"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER:-dashly} -d $${POSTGRES_DB:-dashly}"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
     deploy:
       replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
       restart_policy:
         condition: on-failure
       resources:
