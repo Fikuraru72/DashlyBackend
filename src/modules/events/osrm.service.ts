@@ -223,10 +223,10 @@ export class OsrmService {
       const timestamps = orderedPoints.map((p) => Math.round(p.timestamp / 1000));
       const timestampParam = timestamps.join(';');
 
-      // radiuses: per-point GPS accuracy tolerance in meters (15m is reasonable for smartphones)
-      const radiuses = orderedPoints.map(() => '15').join(';');
+      // radiuses: per-point GPS accuracy tolerance in meters (35m is suitable for smartphone GPS)
+      const radiuses = orderedPoints.map(() => '35').join(';');
 
-      const profile = this.configService.get<string>('OSRM_PROFILE', 'bike');
+      const profile = this.getProfile('CYCLING');
       const url =
         `${this.getBaseUrl()}/match/v1/${profile}/${coordinatePath}` +
         `?overview=false&geometries=geojson&timestamps=${timestampParam}&radiuses=${radiuses}&tidy=true`;
@@ -253,8 +253,8 @@ export class OsrmService {
         } | null>;
       };
 
-      // Low-confidence matches can jump to a parallel road; keep the route projection fallback.
-      if ((body.matchings?.[0]?.confidence ?? 0) < 0.5) return null;
+      // Accept matches with confidence >= 0.1
+      if ((body.matchings?.[0]?.confidence ?? 0) < 0.1) return null;
 
       // Use the tracepoint for the LAST input point — this is the snapped current position
       const tracepoints = body.tracepoints;
@@ -312,7 +312,7 @@ export class OsrmService {
   }
 
   private getProfile(_category: EventCategory): string {
-    return this.configService.get<string>('OSRM_PROFILE', 'bike');
+    return this.configService.get<string>('OSRM_PROFILE', 'bicycle');
   }
 
   private extractLineString(geojson: unknown): Feature<LineString> | null {

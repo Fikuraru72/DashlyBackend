@@ -83,7 +83,7 @@ describe('OsrmService region validation', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining(
-        '/match/v1/bike/112.7508,-7.2575;112.7518,-7.2583?overview=false&geometries=geojson&timestamps=1;2&radiuses=15;15&tidy=true',
+        '/match/v1/bicycle/112.7508,-7.2575;112.7518,-7.2583?overview=false&geometries=geojson&timestamps=1;2&radiuses=35;35&tidy=true',
       ),
       expect.any(Object),
     );
@@ -93,7 +93,7 @@ describe('OsrmService region validation', () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({
-        matchings: [{ confidence: 0.1 }],
+        matchings: [{ confidence: 0.05 }],
         tracepoints: [
           { location: [112.7509, -7.2574], distance: 4 },
           { location: [112.7519, -7.2584], distance: 3 },
