@@ -231,6 +231,8 @@ services:
 
   mosquitto:
     image: eclipse-mosquitto:2.0.22
+    ports:
+      - '1883:1883'
     configs:
       - source: mosquitto_config
         target: /mosquitto/config/mosquitto.conf
