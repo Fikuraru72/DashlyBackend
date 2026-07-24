@@ -1,4 +1,4 @@
-import { IsObject, IsOptional, IsString, IsNumber, ValidateNested } from 'class-validator';
+import { IsOptional, IsString, IsNumber, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { HealthInfoDto } from '../../auth/dto/register.dto';
 

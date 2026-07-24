@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as mqtt from 'mqtt';
 import { TrackingValidatorService } from '../tracking/tracking-validator.service';
@@ -64,7 +59,7 @@ export class MqttIngestService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.client.on('message', (topic, message) => {
-      this.handleMessage(topic, message);
+      void this.handleMessage(topic, message);
     });
   }
 
@@ -80,12 +75,6 @@ export class MqttIngestService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleMessage(topic: string, message: Buffer) {
-    const fs = require('fs');
-    fs.appendFileSync('mqtt_debug.log', `[DEBUG] topic: ${topic}\n`);
-    fs.appendFileSync(
-      'mqtt_debug.log',
-      `[DEBUG] payload: ${message.toString()}\n`,
-    );
     try {
       const parts = topic.split('/');
       const eventId = parseInt(parts[2], 10);
@@ -96,20 +85,14 @@ export class MqttIngestService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      const participantId = await this.identityCache.resolveParticipantId(
-        eventId,
-        userId,
-      );
+      const participantId = await this.identityCache.resolveParticipantId(eventId, userId);
       if (!participantId) {
-        this.logger.warn(
-          `[Ingest] Participant not found for Event ${eventId}, User ${userId}`,
-        );
+        this.logger.warn(`[Ingest] Participant not found for Event ${eventId}, User ${userId}`);
         return;
       }
 
       const payloadStr = message.toString();
       if (!payloadStr) return;
-
 
       const payload = JSON.parse(payloadStr);
       const raw: RawIngestPayload = {
@@ -150,12 +133,7 @@ export class MqttIngestService implements OnModuleInit, OnModuleDestroy {
 
       if (topic.endsWith('/sync')) {
         if (Array.isArray(payload) && payload.length > 0) {
-          await this.validator.processSyncBatch(
-            eventId,
-            participantId,
-            userId,
-            payload,
-          );
+          await this.validator.processSyncBatch(eventId, participantId, userId, payload);
         }
         return;
       }
@@ -180,10 +158,7 @@ export class MqttIngestService implements OnModuleInit, OnModuleDestroy {
         await this.validator.processLocation(raw);
       }
     } catch (e) {
-      this.logger.error(
-        `[Ingest] Error processing message from topic ${topic}`,
-        e,
-      );
+      this.logger.error(`[Ingest] Error processing message from topic ${topic}`, e);
     }
   }
 }

@@ -15,10 +15,10 @@ import { ProcessedRoute } from '../../common/interfaces/tracking-event.interface
 @Injectable()
 export class OffRouteEngine {
   private readonly logger = new Logger(OffRouteEngine.name);
-  private readonly DEFAULT_THRESHOLD = 20; // metres (increased for cycling)
+  private readonly DEFAULT_THRESHOLD = 5; // metres (user requirement: 5m)
   private readonly SHARP_TURN_THRESHOLD = 10; // metres (near corners)
   private readonly SHARP_TURN_ANGLE_DEG = 45; // degrees
-  private readonly CONSECUTIVE_COUNT_TRIGGER = 1; // DIUBAH JADI 1 UNTUK TESTING (sebelumnya 3)
+  private readonly CONSECUTIVE_COUNT_TRIGGER = 3;
   private readonly MIN_SPEED_FOR_OFFROUTE = 0.3; // m/s — below this, GPS drift is expected
 
   constructor(private readonly redisService: RedisService) {}
@@ -44,8 +44,7 @@ export class OffRouteEngine {
     );
 
     // ── Speed gate: moving too slow = GPS drift, not off-route ───
-    // Exception: If they are more than 100m away, it's definitely not just GPS drift.
-    if (speedCalculated < this.MIN_SPEED_FOR_OFFROUTE && snapDistanceMeters < 100) {
+    if (speedCalculated < this.MIN_SPEED_FOR_OFFROUTE) {
       return {
         offRoute: false,
         offRouteDistance: Math.round(snapDistanceMeters),
@@ -54,16 +53,21 @@ export class OffRouteEngine {
       };
     }
 
-    // ── Cooldown check ───────────────────────────────────────────
-    const isCoolingDown = false; // MATIKAN SEMENTARA UNTUK TESTING (aslinya: await this.redisService.getOffRouteCooldown(participantId); )
+    // ── Cooldown check: suppress alerts for 5 events after trigger ─
+    const isCoolingDown = await this.redisService.getOffRouteCooldown(participantId);
+    if (isCoolingDown) {
+      // Still track the count but don't emit alerts
+      return {
+        offRoute: snapDistanceMeters > this.DEFAULT_THRESHOLD,
+        offRouteDistance: Math.round(snapDistanceMeters),
+        consecutiveCount: 0, // Suppressed
+        alertEmitted: false,
+      };
+    }
 
     // ── Dynamic threshold: check for sharp turns ─────────────────
     let threshold = this.DEFAULT_THRESHOLD;
-    if (
-      route &&
-      lastSegmentIdx >= 0 &&
-      lastSegmentIdx < route.segmentCount - 1
-    ) {
+    if (route && lastSegmentIdx >= 0 && lastSegmentIdx < route.segmentCount - 1) {
       const angle = this.computeSegmentAngle(route, lastSegmentIdx);
       if (angle > this.SHARP_TURN_ANGLE_DEG) {
         threshold = this.SHARP_TURN_THRESHOLD;
@@ -71,18 +75,11 @@ export class OffRouteEngine {
     }
 
     // ── Core detection logic ─────────────────────────────────────
-    const currentCount = await this.redisService.getOffRouteCount(
-      eventId,
-      participantId,
-    );
+    const currentCount = await this.redisService.getOffRouteCount(eventId, participantId);
 
     if (snapDistanceMeters > threshold) {
       const newCount = currentCount + 1;
-      await this.redisService.setOffRouteCount(
-        eventId,
-        participantId,
-        newCount,
-      );
+      await this.redisService.setOffRouteCount(eventId, participantId, newCount);
 
       this.logger.debug(
         `[DIAGNOSTIC - OFF_ROUTE] EXCEEDED THRESHOLD! ` +
@@ -93,16 +90,13 @@ export class OffRouteEngine {
       const offRoute = newCount >= this.CONSECUTIVE_COUNT_TRIGGER;
       let alertEmitted = false;
 
-      // Only emit alert and set new cooldown if NOT currently in cooldown
-      if (offRoute && !isCoolingDown) {
+      if (offRoute) {
         this.logger.warn(
           `[OffRoute] 🚨 Participant ${participantId} OFF ROUTE (${Math.round(snapDistanceMeters)}m, threshold=${threshold}m, ${newCount} consecutive)`,
         );
         alertEmitted = true;
         // Set cooldown to prevent spam
         await this.redisService.setOffRouteCooldown(participantId);
-      } else if (offRoute && isCoolingDown) {
-        this.logger.debug(`[OffRoute] 🔇 Participant ${participantId} off route but cooling down (suppressed)`);
       }
 
       this.logger.debug(
@@ -134,11 +128,7 @@ export class OffRouteEngine {
       // Truly back on route -> safely decrement
       if (currentCount > 0) {
         finalCount = currentCount - 1;
-        await this.redisService.setOffRouteCount(
-          eventId,
-          participantId,
-          finalCount,
-        );
+        await this.redisService.setOffRouteCount(eventId, participantId, finalCount);
         this.logger.debug(
           `[DIAGNOSTIC - OFF_ROUTE] TRULY BACK ON ROUTE. ` +
             `snapDistance=${snapDistanceMeters.toFixed(2)}m <= 20m | ` +

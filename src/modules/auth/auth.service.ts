@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  Inject,
-  UnauthorizedException,
-  BadRequestException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, Inject, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { DB_CONNECTION } from '../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../db/schema';
@@ -15,6 +9,8 @@ import { OAuth2Client } from 'google-auth-library';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
+import { ConfigService } from '@nestjs/config';
+import { JwtPayload } from './strategies/jwt.strategy';
 
 @Injectable()
 export class AuthService {
@@ -23,8 +19,9 @@ export class AuthService {
   constructor(
     @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
     private jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {
-    this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    this.googleClient = new OAuth2Client(this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'));
   }
 
   // ── Helper: resolve role name from roleId ─────────────────────────
@@ -97,50 +94,34 @@ export class AuthService {
   }
 
   async googleLogin(dto: GoogleLoginDto) {
-    let email = dto.email;
-    let name = dto.name;
-    let googleId = dto.googleId;
-    let avatar = dto.avatar;
-
-    // ── 1. Verify Google ID Token ────────────────────────────────
+    let payload;
     try {
       const ticket = await this.googleClient.verifyIdToken({
         idToken: dto.token,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'),
       });
-      const payload = ticket.getPayload();
-      if (!payload) {
-        throw new UnauthorizedException('Invalid Google token');
-      }
-      // Use verified data from Google
-      email = payload.email!;
-      googleId = payload.sub;
-      name = payload.name;
-      avatar = payload.picture;
-    } catch (e) {
-      console.error('[GoogleLogin] Verification failed:', e);
-      // In a real production app, we MUST fail here.
-      // For this project phase, we'll allow fallback IF token is 'dummy_token'
-      // to support easy testing without real Google Play Services.
-      if (dto.token !== 'dummy_token') {
-        throw new UnauthorizedException('Google authentication failed');
-      }
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Google authentication failed');
     }
 
-    if (!email || !googleId) {
-      throw new BadRequestException('Email and GoogleId are required');
+    if (!payload?.email || !payload.email_verified || !payload.sub) {
+      throw new UnauthorizedException('Invalid Google identity');
     }
 
+    const { email, sub: googleId, name, picture: avatar } = payload;
     let user = await this.db.query.users.findFirst({
       where: eq(schema.users.email, email),
     });
 
     if (user) {
-      // Link Google ID if not already linked
+      if (user.googleId && user.googleId !== googleId) {
+        throw new UnauthorizedException('Google account does not match');
+      }
       if (!user.googleId) {
         const [updatedUser] = await this.db
           .update(schema.users)
-          .set({ googleId: googleId, avatar: avatar })
+          .set({ googleId, avatar })
           .where(eq(schema.users.id, user.id))
           .returning();
         user = updatedUser;
@@ -150,10 +131,10 @@ export class AuthService {
       const [newUser] = await this.db
         .insert(schema.users)
         .values({
-          email: email,
+          email,
           name: name || 'Google User',
-          googleId: googleId,
-          avatar: avatar,
+          googleId,
+          avatar,
           roleId,
         })
         .returning();
@@ -164,22 +145,21 @@ export class AuthService {
     return this.generateToken(user, roleName);
   }
 
-  private generateToken(user: any, roleName: string) {
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: roleName, // 'SUPER_ADMIN', 'STAFF', or 'PARTICIPANT'
-    };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '100y' });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '100y' });
+  private generateToken(user: typeof schema.users.$inferSelect, roleName: string) {
+    const accessToken = this.jwtService.sign(
+      { sub: user.id, email: user.email, role: roleName, tokenType: 'access' },
+      { expiresIn: '15m' },
+    );
+    const refreshToken = this.jwtService.sign(
+      { sub: user.id, tokenType: 'refresh' },
+      { expiresIn: '30d' },
+    );
 
     return {
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
-        phone: user.phone,
-        healthInfo: user.healthInfo,
         role: roleName,
         avatar: user.avatar,
       },
@@ -190,7 +170,10 @@ export class AuthService {
 
   async refresh(refreshToken: string) {
     try {
-      const payload = this.jwtService.verify(refreshToken);
+      const payload = this.jwtService.verify<JwtPayload>(refreshToken);
+      if (payload.tokenType !== 'refresh') {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
       const user = await this.db.query.users.findFirst({
         where: eq(schema.users.id, payload.sub),
       });
@@ -199,7 +182,7 @@ export class AuthService {
       }
       const roleName = await this.resolveRoleName(user.roleId);
       return this.generateToken(user, roleName);
-    } catch (e) {
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
   }

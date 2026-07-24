@@ -1,12 +1,9 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Queue, Worker, Job } from 'bullmq';
+import { Queue } from 'bullmq';
 import Redis, { Redis as RedisClient } from 'ioredis';
+
+import { getRedisOptions } from '../redis/redis-options';
 import {
   TrackingEvent,
   QUEUE_TRACKING_RAW,
@@ -33,8 +30,7 @@ export class TrackingStreamService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.connection = new Redis({
-      host: this.configService.get<string>('REDIS_HOST') || 'localhost',
-      port: this.configService.get<number>('REDIS_PORT') || 6379,
+      ...getRedisOptions(this.configService),
       maxRetriesPerRequest: null, // Required by BullMQ
     });
 
@@ -65,6 +61,7 @@ export class TrackingStreamService implements OnModuleInit, OnModuleDestroy {
       backoff: { type: 'exponential', delay: 1000 },
       removeOnComplete: 1000,
       removeOnFail: 5000,
+      jobId: event.messageId,
     });
   }
 
@@ -75,6 +72,7 @@ export class TrackingStreamService implements OnModuleInit, OnModuleDestroy {
       backoff: { type: 'exponential', delay: 1000 },
       removeOnComplete: 1000,
       removeOnFail: 5000,
+      jobId: event.messageId,
     });
   }
 
@@ -83,8 +81,7 @@ export class TrackingStreamService implements OnModuleInit, OnModuleDestroy {
   /** Returns a DEDICATED Redis connection for a BullMQ Worker (must be separate from the Queue connection). */
   createWorkerConnection(): RedisClient {
     return new Redis({
-      host: this.configService.get<string>('REDIS_HOST') || 'localhost',
-      port: this.configService.get<number>('REDIS_PORT') || 6379,
+      ...getRedisOptions(this.configService),
       maxRetriesPerRequest: null,
     });
   }

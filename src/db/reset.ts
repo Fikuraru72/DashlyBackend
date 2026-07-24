@@ -20,4 +20,4 @@ async function reset() {
   }
 }
 
-reset();
+void reset();

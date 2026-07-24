@@ -1,13 +1,24 @@
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { RedisIoAdapter } from './websocket/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.enableShutdownHooks();
+  app.useWebSocketAdapter(new RedisIoAdapter(app));
 
   // Apply Global Exception Filter
   app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   // Increase payload size limit to 50mb for large GeoJSON & Base64 images
   app.useBodyParser('json', { limit: '50mb' });
@@ -25,4 +36,4 @@ async function bootstrap() {
 
   console.log(`Application is running on: http://0.0.0.0:${port}`);
 }
-bootstrap();
+void bootstrap();

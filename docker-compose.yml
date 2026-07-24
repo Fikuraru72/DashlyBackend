@@ -8,13 +8,13 @@ services:
       POSTGRES_USER: dashly_user
       POSTGRES_PASSWORD: dashly_password
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - dashly-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d dashly_db -U dashly_user"]
+      test: ['CMD-SHELL', 'pg_isready -d dashly_db -U dashly_user']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,13 +25,13 @@ services:
     restart: always
     command: redis-server --save 60 1 --loglevel warning
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redis_data:/data
     networks:
       - dashly-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,12 +41,11 @@ services:
     container_name: dashly_mosquitto
     restart: always
     ports:
-      - "1883:1883"
+      - '1883:1883'
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
     networks:
       - dashly-network
-
 
 networks:
   dashly-network:

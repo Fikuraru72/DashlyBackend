@@ -1,7 +1,12 @@
+.git
+.github
+.pi-subagents
 node_modules
 dist
 coverage
-.git
 .env
 .env.*
-.pi-subagents
+!.env.example
+osrm-data
+*.log
+DEPLOY.md

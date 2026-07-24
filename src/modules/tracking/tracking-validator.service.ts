@@ -1,11 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { IdentityCacheService } from './identity-cache.service';
 import { EventCacheService } from './event-cache.service';
 import { TrackingStreamService } from '../stream/tracking-stream.service';
-import {
-  TrackingEvent,
-  RawIngestPayload,
-} from '../common/interfaces/tracking-event.interface';
+import { TrackingEvent, RawIngestPayload } from '../common/interfaces/tracking-event.interface';
 
 /**
  * TrackingValidatorService — LIGHTWEIGHT normaliser.
@@ -72,7 +68,10 @@ export class TrackingValidatorService {
         lat: p.lat,
         lng: p.lng,
         speed: p.speed || 0,
-        battery: p.battery != null && !isNaN(parseInt(p.battery as string)) ? parseInt(p.battery as string) : undefined,
+        battery:
+          p.battery != null && !isNaN(parseInt(p.battery as string))
+            ? parseInt(p.battery as string)
+            : undefined,
         capturedAt: p.captured_at || null,
         status: 'sync',
       };
@@ -100,7 +99,10 @@ export class TrackingValidatorService {
 
       lat: parseFloat(raw.lat as string),
       lng: parseFloat(raw.lng as string),
-      altitude: raw.altitude != null && !isNaN(parseFloat(raw.altitude as string)) ? parseFloat(raw.altitude as string) : undefined,
+      altitude:
+        raw.altitude != null && !isNaN(parseFloat(raw.altitude as string))
+          ? parseFloat(raw.altitude as string)
+          : undefined,
       speedFromClient: parseFloat(raw.speed as string) || 0,
 
       // Enrichment consumer will populate these
@@ -120,7 +122,10 @@ export class TrackingValidatorService {
         isLate: false,
       },
 
-      battery: raw.battery != null && !isNaN(parseInt(raw.battery as string)) ? parseInt(raw.battery as string) : undefined,
+      battery:
+        raw.battery != null && !isNaN(parseInt(raw.battery as string))
+          ? parseInt(raw.battery as string)
+          : undefined,
       clientStatus: raw.status || 'moving',
       gatekeeperAction: 'VALID', // Default; enrichment may change to ANOMALY/LATE
     };

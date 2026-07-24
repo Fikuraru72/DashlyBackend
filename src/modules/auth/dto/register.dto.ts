@@ -1,12 +1,11 @@
 import {
   IsEmail,
   IsNotEmpty,
-  IsObject,
+  IsNumber,
   IsOptional,
   IsString,
   MinLength,
   ValidateNested,
-  IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 

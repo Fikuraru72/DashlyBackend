@@ -4,7 +4,6 @@ import { RedisService } from '../../redis/redis.service';
 import { DB_CONNECTION } from '../../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../db/schema';
-import { eq } from 'drizzle-orm';
 import { EventsGateway } from '../../websocket/events.gateway';
 
 @Injectable()

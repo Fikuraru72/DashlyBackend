@@ -1,10 +1,6 @@
-import {
-  Injectable,
-  Logger,
-  Inject,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+
+import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Worker, Job } from 'bullmq';
 import { TrackingStreamService } from '../../stream/tracking-stream.service';
@@ -18,7 +14,6 @@ import Redis from 'ioredis';
 import {
   TrackingEvent,
   QUEUE_TRACKING_RAW,
-  IntelligenceResult,
   ProcessedRoute,
 } from '../../common/interfaces/tracking-event.interface';
 
@@ -42,9 +37,7 @@ import { OsrmService } from '../../events/osrm.service';
  *   - Per-message processing latency measurement
  */
 @Injectable()
-export class TrackingEnrichmentConsumer
-  implements OnModuleInit, OnModuleDestroy
-{
+export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TrackingEnrichmentConsumer.name);
   private worker!: Worker;
   private workerConnection!: Redis;
@@ -57,12 +50,14 @@ export class TrackingEnrichmentConsumer
   private enableRanking = true;
   private enableOffRoute = true;
   private enableStopDetection = true;
-  private enableMapMatching = true;
 
   // Observability counters
   private dropCountNoise = 0;
   private dropCountDuplicate = 0;
   private anomalyCount = 0;
+
+  private readonly participantLockTtlMs = 30_000;
+  private readonly participantLockRetryMs = 25;
 
   constructor(
     private readonly stream: TrackingStreamService,
@@ -79,14 +74,9 @@ export class TrackingEnrichmentConsumer
 
   onModuleInit() {
     // ── Load feature flags from environment ──────────────────────
-    this.enableRanking =
-      this.configService.get('ENABLE_RANKING', 'true') !== 'false';
-    this.enableOffRoute =
-      this.configService.get('ENABLE_OFFROUTE', 'true') !== 'false';
-    this.enableStopDetection =
-      this.configService.get('ENABLE_STOP_DETECTION', 'true') !== 'false';
-    this.enableMapMatching =
-      this.configService.get('ENABLE_MAP_MATCHING', 'true') !== 'false';
+    this.enableRanking = this.configService.get('ENABLE_RANKING', 'true') !== 'false';
+    this.enableOffRoute = this.configService.get('ENABLE_OFFROUTE', 'true') !== 'false';
+    this.enableStopDetection = false;
 
     this.logger.log(
       `Feature flags: ranking=${this.enableRanking}, offRoute=${this.enableOffRoute}, stopDetection=${this.enableStopDetection}`,
@@ -97,11 +87,11 @@ export class TrackingEnrichmentConsumer
     this.worker = new Worker(
       QUEUE_TRACKING_RAW,
       async (job: Job<TrackingEvent>) => {
-        await this.process(job.data);
+        await this.processWithParticipantLock(job.data);
       },
       {
         connection: this.workerConnection as any,
-        concurrency: 1,
+        concurrency: 5,
       },
     );
 
@@ -109,9 +99,7 @@ export class TrackingEnrichmentConsumer
       this.logger.error(`Enrichment job ${job?.id} failed:`, err);
     });
 
-    this.logger.log(
-      'Enrichment consumer started (HARDENED) on queue: ' + QUEUE_TRACKING_RAW,
-    );
+    this.logger.log('Enrichment consumer started (HARDENED) on queue: ' + QUEUE_TRACKING_RAW);
   }
 
   async onModuleDestroy() {
@@ -123,25 +111,34 @@ export class TrackingEnrichmentConsumer
   //  CORE PROCESSING LOGIC (HARDENED)
   // ═══════════════════════════════════════════════════════════════
 
-  private async process(event: TrackingEvent): Promise<void> {
-    const startMs = Date.now();
-    const { eventId, participantId, messageId, lat, lng } = event;
-    const capturedAtMs = new Date(event.capturedAt).getTime();
+  private async processWithParticipantLock(event: TrackingEvent): Promise<void> {
+    const lockKey = `lock:tracking:${event.eventId}:${event.participantId}`;
+    const token = randomUUID();
 
-    // ── 0. Register event for ranking flush ───────────────────────
-    this.rankingEngine.registerActiveEvent(eventId);
-
-    // ── 1. Deduplication ─────────────────────────────────────────
-    const isDuplicate = await this.redisService.isMessageProcessed(
-      eventId,
-      messageId,
-    );
-    if (isDuplicate) {
-      this.dropCountDuplicate++;
-      return;
+    while (!(await this.redisService.acquireOwnedLock(lockKey, token, this.participantLockTtlMs))) {
+      await new Promise((resolve) => setTimeout(resolve, this.participantLockRetryMs));
     }
 
-    // ── 2. Read previous state (with single-flight DB fallback) ──
+    const renewal = setInterval(() => {
+      void this.redisService
+        .extendOwnedLock(lockKey, token, this.participantLockTtlMs)
+        .catch((error) => this.logger.error(`Failed to renew ${lockKey}`, error));
+    }, this.participantLockTtlMs / 3);
+
+    try {
+      await this.process(event);
+    } finally {
+      clearInterval(renewal);
+      await this.redisService.releaseOwnedLock(lockKey, token);
+    }
+  }
+
+  private async process(event: TrackingEvent): Promise<void> {
+    const startMs = Date.now();
+    const { eventId, participantId, lat, lng } = event;
+    const capturedAtMs = new Date(event.capturedAt).getTime();
+
+    // ── 1. Read previous state (with single-flight DB fallback) ──
     let prevStats = await this.redisService.getParticipantStats(participantId);
 
     let lastTime = 0;
@@ -195,12 +192,7 @@ export class TrackingEnrichmentConsumer
     let speedCalculated = event.speedFromClient;
 
     if (lastLat !== null && lastLng !== null) {
-      distanceDelta = this.calculateHaversineDistance(
-        lastLat,
-        lastLng,
-        lat,
-        lng,
-      );
+      distanceDelta = this.calculateHaversineDistance(lastLat, lastLng, lat, lng);
       const timeDeltaSec = (capturedAtMs - lastTime) / 1000;
 
       if (timeDeltaSec > 0) {
@@ -226,10 +218,11 @@ export class TrackingEnrichmentConsumer
       const currentAlt = event.altitude;
       if (currentAlt < minAltitude) minAltitude = currentAlt;
       if (currentAlt > maxAltitude) maxAltitude = currentAlt;
-      
+
       if (lastAltitude != null) {
         const diff = currentAlt - lastAltitude;
-        if (diff > 1.0) { // 1 meter threshold for noise filtering
+        if (diff > 1.0) {
+          // 1 meter threshold for noise filtering
           elevationGain += diff;
         }
       }
@@ -277,11 +270,27 @@ export class TrackingEnrichmentConsumer
     // ── 6. Event Intelligence Layer (HARDENED) ───────────────────
     const route = await this.getRoute(eventId);
     if (route) {
-      this.logger.debug(
-        `[Consumer] Route found for event ${eventId}, processing intelligence.`,
-      );
-      // Engine A: Progress (hardened — graduated snap fallback)
-      const progressResult = await this.progressEngine.compute(event, route);
+      this.logger.debug(`[Consumer] Route found for event ${eventId}, processing intelligence.`);
+      // Engine A: route progress + road-network map matching for display.
+      await this.redisService.pushTrajectoryPoint(participantId, lng, lat, capturedAtMs);
+      const [progressResult, roadMatchedPosition] = await Promise.all([
+        this.progressEngine.compute(event, route),
+        this.redisService
+          .getTrajectoryBuffer(participantId)
+          .then((trajectory) => this.osrmService.matchTrajectory(trajectory)),
+      ]);
+      if (
+        roadMatchedPosition &&
+        this.calculateHaversineDistance(
+          progressResult.snappedLat,
+          progressResult.snappedLng,
+          roadMatchedPosition.lat,
+          roadMatchedPosition.lng,
+        ) <= 50
+      ) {
+        progressResult.snappedLat = roadMatchedPosition.lat;
+        progressResult.snappedLng = roadMatchedPosition.lng;
+      }
 
       // Engine B: Off-Route (hardened — cooldown, dynamic threshold, speed gate)
       let offRouteResult = {
@@ -406,42 +415,12 @@ export class TrackingEnrichmentConsumer
         });
       }
 
-      // ── 8. OSRM Map Matching (Trajectory Buffer → Snap-to-Road) ─
-      let finalSnappedLat = progressResult.snappedLat;
-      let finalSnappedLng = progressResult.snappedLng;
-
-      if (this.enableMapMatching) {
-        // Push raw GPS point to trajectory buffer
-        await this.redisService.pushTrajectoryPoint(
-          participantId,
-          lng,
-          lat,
-          capturedAtMs,
-        );
-
-        // Attempt OSRM Map Match with trajectory
-        const trajectory =
-          await this.redisService.getTrajectoryBuffer(participantId);
-
-        if (trajectory.length >= 2) {
-          const matched =
-            await this.osrmService.matchTrajectory(trajectory);
-          if (matched) {
-            finalSnappedLat = matched.lat;
-            finalSnappedLng = matched.lng;
-            this.logger.debug(
-              `[MapMatch] ✅ OSRM snap for participant ${participantId}: [${matched.lng}, ${matched.lat}]`,
-            );
-          }
-        }
-      }
-
-      // ── 9. Attach Intelligence Result ──────────────────────────
+      // ── 8. Attach Intelligence Result ──────────────────────────
       event.intelligence = {
         progressPercentage: progressResult.progressPercentage,
         distanceToFinish: progressResult.distanceToFinish,
-        snappedLat: finalSnappedLat,
-        snappedLng: finalSnappedLng,
+        snappedLat: progressResult.snappedLat,
+        snappedLng: progressResult.snappedLng,
         rank: rankResult.rank,
         totalParticipants: rankResult.totalParticipants,
         offRoute: offRouteResult.offRoute,
@@ -478,11 +457,7 @@ export class TrackingEnrichmentConsumer
     });
 
     const statsKey = `participant_stats:${participantId}`;
-    await this.redisService['redisClient'].hset(
-      statsKey,
-      'participantState',
-      currentState,
-    );
+    await this.redisService['redisClient'].hset(statsKey, 'participantState', currentState);
 
     // ── 10. Replay buffer (memory-safe: 100 events, 10m TTL) ────
     await this.redisService.pushEventToReplayBuffer(participantId, event);
@@ -490,25 +465,18 @@ export class TrackingEnrichmentConsumer
     // ── 11. Publish enriched event downstream ────────────────────
     await this.stream.publishEnriched(event);
 
-    // ── 12. Structured observability log ─────────────────────────
+    // ── 12. Log only slow jobs; per-GPS info logs become a bottleneck ──
     const processingMs = Date.now() - startMs;
-    this.logger.log(
-      JSON.stringify({
-        type: 'ENRICHMENT_COMPLETE',
-        participantId,
-        eventId,
-        action: event.gatekeeperAction || 'VALID',
-        progress: event.intelligence?.progressPercentage ?? null,
-        rank: event.intelligence?.rank ?? null,
-        score: event.intelligence?.score ?? null,
-        offRoute: event.intelligence?.offRoute ?? false,
-        stopped: event.intelligence?.stopped ?? false,
-        processingMs,
-        dropsDuplicate: this.dropCountDuplicate,
-        dropsNoise: this.dropCountNoise,
-        anomalyCount: this.anomalyCount,
-      }),
-    );
+    if (processingMs >= 1000) {
+      this.logger.warn(
+        JSON.stringify({
+          type: 'SLOW_ENRICHMENT',
+          participantId,
+          eventId,
+          processingMs,
+        }),
+      );
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -517,16 +485,14 @@ export class TrackingEnrichmentConsumer
 
   private async singleFlightDbFallback(
     participantId: number,
-    eventId: number,
+    _eventId: number,
   ): Promise<Record<string, string>> {
     const lockKey = `lock:participant_fallback:${participantId}`;
 
     const acquired = await this.redisService.acquireLock(lockKey, 5000); // 5s TTL
     if (!acquired) {
       // Another worker is already fetching — skip this round
-      this.logger.debug(
-        `[Fallback] Lock held for participant ${participantId}, skipping DB fetch`,
-      );
+      this.logger.debug(`[Fallback] Lock held for participant ${participantId}, skipping DB fetch`);
       return {};
     }
 
@@ -557,10 +523,7 @@ export class TrackingEnrichmentConsumer
 
       return {};
     } catch (err) {
-      this.logger.error(
-        `[Fallback] DB fetch failed for participant ${participantId}`,
-        err,
-      );
+      this.logger.error(`[Fallback] DB fetch failed for participant ${participantId}`, err);
       return {};
     } finally {
       await this.redisService.releaseLock(lockKey);
@@ -599,7 +562,7 @@ export class TrackingEnrichmentConsumer
     if (typeof geojson === 'string') {
       try {
         parsedGeojson = JSON.parse(geojson);
-      } catch (e) {}
+      } catch {}
     }
 
     let coordinates: [number, number][] = [];
@@ -613,10 +576,6 @@ export class TrackingEnrichmentConsumer
         (f: any) => f.geometry && f.geometry.type === 'LineString',
       );
       if (feature) coordinates = feature.geometry.coordinates;
-    } else if (parsedGeojson.type === 'Feature' && parsedGeojson.geometry) {
-      if (parsedGeojson.geometry.type === 'LineString') {
-        coordinates = parsedGeojson.geometry.coordinates;
-      }
     } else if (parsedGeojson.type === 'LineString') {
       coordinates = parsedGeojson.coordinates;
     } else if (parsedGeojson.coordinates) {
@@ -625,20 +584,14 @@ export class TrackingEnrichmentConsumer
 
     this.logger.debug(`[getRoute] coordinates length=${coordinates?.length}`);
 
-    if (!coordinates || !Array.isArray(coordinates) || coordinates.length === 0)
-      return null;
+    if (!coordinates || !Array.isArray(coordinates) || coordinates.length === 0) return null;
     const cumulativeDistances = [0];
     let totalDist = 0;
 
     for (let i = 1; i < coordinates.length; i++) {
       const [prevLng, prevLat] = coordinates[i - 1];
       const [currLng, currLat] = coordinates[i];
-      const d = this.calculateHaversineDistance(
-        prevLat,
-        prevLng,
-        currLat,
-        currLng,
-      );
+      const d = this.calculateHaversineDistance(prevLat, prevLng, currLat, currLng);
       totalDist += d;
       cumulativeDistances.push(totalDist);
     }
@@ -650,10 +603,7 @@ export class TrackingEnrichmentConsumer
       segmentCount: coordinates.length - 1,
     };
 
-    await this.redisService.setCachedRoute(
-      eventId,
-      JSON.stringify(processedRoute),
-    );
+    await this.redisService.setCachedRoute(eventId, JSON.stringify(processedRoute));
     this.routeMemoryCache.set(eventId, processedRoute);
     this.enforceCacheLimit(this.routeMemoryCache, 20);
 
@@ -682,12 +632,7 @@ export class TrackingEnrichmentConsumer
     return cat;
   }
 
-  private calculateEuclideanDist(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number,
-  ): number {
+  private calculateEuclideanDist(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const M_PER_DEG_LAT = 111_320;
     const cosLat = Math.cos((((lat1 + lat2) / 2) * Math.PI) / 180);
     const M_PER_DEG_LNG = 111_320 * cosLat;

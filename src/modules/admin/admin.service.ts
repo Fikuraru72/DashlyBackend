@@ -2,7 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { DB_CONNECTION } from '../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../db/schema';
-import { eq, isNull, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { RedisService } from '../redis/redis.service';
 
 @Injectable()
@@ -36,9 +36,7 @@ export class AdminService {
         .where(inArray(schema.eventParticipants.eventId, activeEventIds));
 
       activeRunners = participants.filter((p) => p.state === 'TRACKING').length;
-      finishedRunners = participants.filter(
-        (p) => p.state === 'FINISHED',
-      ).length;
+      finishedRunners = participants.filter((p) => p.state === 'FINISHED').length;
 
       // Get SOS alerts
       const anomalies = await this.db
@@ -51,9 +49,7 @@ export class AdminService {
 
       // We can also query redis for off_route_cooldown keys to estimate live off-route,
       // but for MVP we can just query the anomalies table or assume.
-      offRouteParticipants = anomalies.filter(
-        (a) => a.type === 'OFF_ROUTE',
-      ).length;
+      offRouteParticipants = anomalies.filter((a) => a.type === 'OFF_ROUTE').length;
     }
 
     return {

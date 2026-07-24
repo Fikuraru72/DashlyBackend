@@ -6,9 +6,7 @@ import * as schema from '../../db/schema';
 
 @Injectable()
 export class HealthService {
-  constructor(
-    @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
-  ) {}
+  constructor(@Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>) {}
 
   async getSync() {
     // Run a lightweight query — count rows in two core tables

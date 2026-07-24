@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { DOMParser } from '@xmldom/xmldom';
 import { gpx } from '@tmcw/togeojson';
-import { FeatureCollection, LineString, Feature } from 'geojson';
+import { LineString, Feature } from 'geojson';
 
 export interface ParsedGpxResult {
   geoJson: Feature<LineString>;
@@ -34,56 +34,30 @@ export class GpxParserService {
 
       const geoJson = gpx(doc);
 
-      // Collect all line segments from the GPX
-      const allSegments: number[][][] = [];
-      
-      for (const f of geoJson.features) {
-        if (f.geometry.type === 'LineString') {
-           allSegments.push(f.geometry.coordinates as number[][]);
-        } else if (f.geometry.type === 'MultiLineString') {
-           allSegments.push(...(f.geometry.coordinates as number[][][]));
-        }
+      // Find the first LineString or MultiLineString
+      let routeFeature = geoJson.features.find(
+        (f) => f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString',
+      ) as Feature<LineString>;
+
+      if (!routeFeature) {
+        throw new BadRequestException('No route (LineString) found in GPX file');
       }
 
-      if (allSegments.length === 0) {
-        throw new BadRequestException(
-          'No route (LineString) found in GPX file',
-        );
+      // If it's a MultiLineString, we flatten it to a single LineString for simplicity
+      if ((routeFeature.geometry.type as any) === 'MultiLineString') {
+        const coords = (routeFeature.geometry as any).coordinates.flat(1);
+        routeFeature = {
+          ...routeFeature,
+          geometry: {
+            type: 'LineString',
+            coordinates: coords,
+          },
+        };
       }
-
-      // Find the longest segment to discard branches/pit-lanes
-      let longestSegment = allSegments[0];
-      let maxLen = -1;
-      
-      for (const segment of allSegments) {
-        let len = 0;
-        for (let i = 1; i < segment.length; i++) {
-          const prev = segment[i - 1];
-          const curr = segment[i];
-          len += this.calculateHaversineDistance(
-            prev[1], prev[0], curr[1], curr[0]
-          );
-        }
-        if (len > maxLen) {
-          maxLen = len;
-          longestSegment = segment;
-        }
-      }
-
-      const routeFeature: Feature<LineString> = {
-        type: 'Feature',
-        properties: { source: 'gpx' },
-        geometry: {
-          type: 'LineString',
-          coordinates: longestSegment,
-        },
-      };
 
       const coordinates = routeFeature.geometry.coordinates;
       if (!coordinates || coordinates.length < 2) {
-        throw new BadRequestException(
-          'GPX route does not contain enough coordinates',
-        );
+        throw new BadRequestException('GPX route does not contain enough coordinates');
       }
 
       let totalDistance = 0;
@@ -110,12 +84,7 @@ export class GpxParserService {
         const curr = coordinates[i];
 
         // coordinates[0] = lng, coordinates[1] = lat, coordinates[2] = elevation (optional)
-        const d = this.calculateHaversineDistance(
-          prev[1],
-          prev[0],
-          curr[1],
-          curr[0],
-        );
+        const d = this.calculateHaversineDistance(prev[1], prev[0], curr[1], curr[0]);
         totalDistance += d;
 
         if (prev.length > 2 && curr.length > 2) {
@@ -152,9 +121,7 @@ export class GpxParserService {
       };
     } catch (error: any) {
       if (error instanceof BadRequestException) throw error;
-      throw new BadRequestException(
-        'Failed to parse GPX file: ' + error.message,
-      );
+      throw new BadRequestException('Failed to parse GPX file: ' + error.message);
     }
   }
 

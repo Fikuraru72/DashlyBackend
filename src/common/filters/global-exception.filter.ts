@@ -1,10 +1,4 @@
-import {
-  ExceptionFilter,
-  Catch,
-  ArgumentsHost,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
 import { Request, Response } from 'express';
 
 @Catch()
@@ -15,9 +9,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     let message = 'Terjadi kesalahan pada server. Silakan coba beberapa saat lagi.';
 
@@ -36,7 +28,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     // Authentication & Authorization
     if (status === 401 && messageStr.toLowerCase().includes('credentials')) {
       userFacingMessage = 'Email atau kata sandi yang Anda masukkan salah.';
-    } else if (status === 401 && (messageStr.toLowerCase().includes('token') || messageStr.toLowerCase().includes('unauthorized'))) {
+    } else if (
+      status === 401 &&
+      (messageStr.toLowerCase().includes('token') ||
+        messageStr.toLowerCase().includes('unauthorized'))
+    ) {
       userFacingMessage = 'Sesi Anda telah berakhir. Silakan login kembali.';
     } else if (status === 403 && messageStr.toLowerCase().includes('permission')) {
       userFacingMessage = 'Anda tidak memiliki akses untuk membuka halaman atau fitur ini.';

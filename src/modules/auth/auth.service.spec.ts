@@ -1,12 +1,13 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
 import { DB_CONNECTION } from '../../db/database.module';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException, ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import * as schema from '../../db/schema';
 
-jest.mock('bcrypt');
+vi.mock('bcrypt');
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -17,20 +18,20 @@ describe('AuthService', () => {
     dbMock = {
       query: {
         users: {
-          findFirst: jest.fn(),
+          findFirst: vi.fn(),
         },
         roles: {
-          findFirst: jest.fn(),
+          findFirst: vi.fn(),
         },
       },
-      insert: jest.fn().mockReturnThis(),
-      values: jest.fn().mockReturnThis(),
-      returning: jest.fn(),
+      insert: vi.fn().mockReturnThis(),
+      values: vi.fn().mockReturnThis(),
+      returning: vi.fn(),
     };
 
     jwtServiceMock = {
-      sign: jest.fn().mockReturnValue('mocked-token'),
-      verify: jest.fn(),
+      sign: vi.fn().mockReturnValue('mocked-token'),
+      verify: vi.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -38,6 +39,10 @@ describe('AuthService', () => {
         AuthService,
         { provide: DB_CONNECTION, useValue: dbMock },
         { provide: JwtService, useValue: jwtServiceMock },
+        {
+          provide: ConfigService,
+          useValue: { getOrThrow: vi.fn().mockReturnValue('client-id') },
+        },
       ],
     }).compile();
 
@@ -45,7 +50,7 @@ describe('AuthService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('register', () => {
@@ -71,13 +76,11 @@ describe('AuthService', () => {
         id: 2,
         name: 'PARTICIPANT',
       });
-      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
+      vi.mocked(bcrypt.hash).mockImplementation(async () => 'hashed-password');
 
       dbMock.insert.mockReturnThis();
       dbMock.values.mockReturnThis();
-      dbMock.returning.mockResolvedValue([
-        { id: 1, email: 'new@test.com', name: 'New User' },
-      ]);
+      dbMock.returning.mockResolvedValue([{ id: 1, email: 'new@test.com', name: 'New User' }]);
 
       const result = await service.register({
         name: 'New User',
@@ -109,11 +112,11 @@ describe('AuthService', () => {
         password: 'hashed-password',
         roleId: 2,
       });
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      vi.mocked(bcrypt.compare).mockImplementation(async () => false);
 
-      await expect(
-        service.login({ email: 'test@test.com', password: 'wrong' }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.login({ email: 'test@test.com', password: 'wrong' })).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should login successfully with correct credentials', async () => {
@@ -128,19 +131,34 @@ describe('AuthService', () => {
         id: 2,
         name: 'PARTICIPANT',
       });
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      vi.mocked(bcrypt.compare).mockImplementation(async () => true);
 
       const result = await service.login({
         email: 'test@test.com',
         password: 'password',
       });
 
-      expect(bcrypt.compare).toHaveBeenCalledWith(
-        'password',
-        'hashed-password',
-      );
+      expect(bcrypt.compare).toHaveBeenCalledWith('password', 'hashed-password');
       expect(result.accessToken).toBe('mocked-token');
       expect(result.user.email).toBe('test@test.com');
+      expect(jwtServiceMock.sign).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ tokenType: 'access' }),
+        { expiresIn: '15m' },
+      );
+      expect(jwtServiceMock.sign).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ tokenType: 'refresh' }),
+        { expiresIn: '30d' },
+      );
+    });
+  });
+
+  describe('refresh', () => {
+    it('rejects an access token', async () => {
+      jwtServiceMock.verify.mockReturnValue({ sub: 1, tokenType: 'access' });
+      await expect(service.refresh('access-token')).rejects.toThrow(UnauthorizedException);
+      expect(dbMock.query.users.findFirst).not.toHaveBeenCalled();
     });
   });
 });

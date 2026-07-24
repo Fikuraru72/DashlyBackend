@@ -15,10 +15,7 @@ import {
 import { relations } from 'drizzle-orm';
 
 export const tokenStatusEnum = pgEnum('token_status', ['AVAILABLE', 'USED']);
-export const eventCategoryEnum = pgEnum('event_category', [
-  'RUNNING',
-  'CYCLING',
-]);
+export const eventCategoryEnum = pgEnum('event_category', ['RUNNING', 'CYCLING']);
 export const eventStatusEnum = pgEnum('event_status', [
   'DRAFT',
   'REGISTRATION_OPEN',
@@ -84,9 +81,7 @@ export const events = pgTable('events', {
   latitude: doublePrecision('latitude'),
   longitude: doublePrecision('longitude'),
   // Monitoring window offsets (in minutes)
-  monitoringStartOffset: integer('monitoring_start_offset')
-    .default(60)
-    .notNull(),
+  monitoringStartOffset: integer('monitoring_start_offset').default(60).notNull(),
   monitoringEndOffset: integer('monitoring_end_offset').default(240).notNull(),
   totalDistanceMeters: integer('total_distance_meters'),
   totalElevationMeters: integer('total_elevation_meters'),
@@ -112,9 +107,7 @@ export const locationLogs = pgTable(
     userId: integer('user_id')
       .references(() => users.id)
       .notNull(), // Backward compatibility
-    participantId: integer('participant_id').references(
-      () => eventParticipants.id,
-    ), // Event context identity
+    participantId: integer('participant_id').references(() => eventParticipants.id), // Event context identity
     eventId: integer('event_id')
       .references(() => events.id)
       .notNull(),
@@ -150,15 +143,14 @@ export const eventParticipants = pgTable(
     userId: integer('user_id').references(() => users.id),
     participantNumber: varchar('participant_number', { length: 50 }),
     bibNumber: varchar('bib_number', { length: 50 }),
-    participantState: participantStateEnum('participant_state')
-      .default('REGISTERED')
-      .notNull(),
+    participantState: participantStateEnum('participant_state').default('REGISTERED').notNull(),
     distanceCovered: integer('distance_covered').default(0).notNull(),
     estimatedFinishTime: timestamp('estimated_finish_time'),
     joinedAt: timestamp('joined_at').defaultNow().notNull(),
   },
   (t) => ({
     unq: uniqueIndex('event_participant_unique').on(t.eventId, t.userId),
+    eventBibUnq: uniqueIndex('event_participant_bib_unique').on(t.eventId, t.bibNumber),
   }),
 );
 
@@ -173,7 +165,9 @@ export const anomalies = pgTable('anomalies', {
   timestamp: timestamp('timestamp').defaultNow().notNull(),
 });
 
-export const rankings = pgTable('rankings',{
+export const rankings = pgTable(
+  'rankings',
+  {
     id: serial('id').primaryKey(),
     eventId: integer('event_id')
       .references(() => events.id)
@@ -184,9 +178,7 @@ export const rankings = pgTable('rankings',{
     participantId: integer('participant_id')
       .references(() => eventParticipants.id)
       .notNull(),
-    progressPercentage: doublePrecision('progress_percentage')
-      .default(0)
-      .notNull(),
+    progressPercentage: doublePrecision('progress_percentage').default(0).notNull(),
     checkpointsCompleted: integer('checkpoints_completed').default(0).notNull(),
     timeEfficiency: doublePrecision('time_efficiency').default(0).notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -239,4 +231,3 @@ export const anomaliesRelations = relations(anomalies, ({ one }) => ({
     references: [users.id],
   }),
 }));
-

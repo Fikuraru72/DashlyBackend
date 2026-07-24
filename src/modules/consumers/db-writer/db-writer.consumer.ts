@@ -1,40 +1,18 @@
-import {
-  Injectable,
-  Logger,
-  Inject,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, Logger, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Worker, Job } from 'bullmq';
-import { TrackingStreamService } from '../../stream/tracking-stream.service';
-import { DB_CONNECTION } from '../../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import * as schema from '../../../db/schema';
-import {
-  TrackingEvent,
-  QUEUE_TRACKING_ENRICHED,
-} from '../../common/interfaces/tracking-event.interface';
 import Redis from 'ioredis';
 
-/**
- * DbWriterConsumer — Persists enriched tracking events to PostgreSQL.
- *
- * Consumes from: tracking-events-enriched
- * Batches inserts every 3 seconds or when buffer reaches 500 items.
- * Uses onConflictDoNothing for idempotent writes.
- *
- * ⚠️  NO WebSocket, NO Redis, NO business logic.
- */
+import { DB_CONNECTION } from '../../../db/database.module';
+import * as schema from '../../../db/schema';
+import { TrackingEvent, QUEUE_TRACKING_DB } from '../../common/interfaces/tracking-event.interface';
+import { TrackingStreamService } from '../../stream/tracking-stream.service';
+
 @Injectable()
 export class DbWriterConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DbWriterConsumer.name);
   private worker!: Worker;
   private workerConnection!: Redis;
-
-  private buffer: TrackingEvent[] = [];
-  private flushTimer: NodeJS.Timeout | null = null;
-  private readonly FLUSH_INTERVAL_MS = 3000;
-  private readonly MAX_BATCH_SIZE = 500;
 
   constructor(
     private readonly stream: TrackingStreamService,
@@ -43,37 +21,17 @@ export class DbWriterConsumer implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.workerConnection = this.stream.createWorkerConnection();
-
     this.worker = new Worker(
-      QUEUE_TRACKING_ENRICHED,
-      async (job: Job<TrackingEvent>) => {
-        this.buffer.push(job.data);
-
-        if (this.buffer.length >= this.MAX_BATCH_SIZE) {
-          await this.flush();
-        }
-      },
-      {
-        connection: this.workerConnection as any,
-        concurrency: 5,
-      },
+      QUEUE_TRACKING_DB,
+      async (job: Job<TrackingEvent>) => this.persist(job.data),
+      { connection: this.workerConnection as never, concurrency: 5 },
     );
-
-    this.worker.on('failed', (job, err) => {
-      this.logger.error(`DB Writer job ${job?.id} failed:`, err);
-    });
-
-    // Periodic flush timer
-    this.flushTimer = setInterval(() => this.flush(), this.FLUSH_INTERVAL_MS);
-
-    this.logger.log(
-      'DB Writer consumer started on queue: ' + QUEUE_TRACKING_ENRICHED,
+    this.worker.on('failed', (job, error) =>
+      this.logger.error(`DB Writer job ${job?.id} failed`, error),
     );
   }
 
   async onModuleDestroy() {
-    if (this.flushTimer) clearInterval(this.flushTimer);
-    await this.flush(); // Final flush
     await this.worker?.close();
     await this.workerConnection?.quit();
   }

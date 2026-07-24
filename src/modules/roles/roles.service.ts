@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Inject,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
 import { DB_CONNECTION } from '../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../db/schema';
@@ -13,9 +8,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 
 @Injectable()
 export class RolesService {
-  constructor(
-    @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
-  ) {}
+  constructor(@Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>) {}
 
   async create(createRoleDto: CreateRoleDto) {
     try {
@@ -57,7 +50,8 @@ export class RolesService {
       const [role] = await this.db
         .update(schema.roles)
         .set({
-          ...updateRoleDto,
+          name: updateRoleDto.name,
+          permissions: updateRoleDto.permissions,
         })
         .where(eq(schema.roles.id, id))
         .returning();
@@ -76,10 +70,7 @@ export class RolesService {
   }
 
   async remove(id: number) {
-    const [role] = await this.db
-      .delete(schema.roles)
-      .where(eq(schema.roles.id, id))
-      .returning();
+    const [role] = await this.db.delete(schema.roles).where(eq(schema.roles.id, id)).returning();
 
     if (!role) {
       throw new NotFoundException(`Role with ID ${id} not found`);

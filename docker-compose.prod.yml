@@ -1,56 +1,233 @@
+x-backend-environment: &backend-environment
+  NODE_ENV: production
+  NODE_OPTIONS: --max-old-space-size=512
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+  MQTT_HOST: mosquitto
+  MQTT_PORT: 1883
+  OSRM_ENABLED: 'true'
+  OSRM_URL: http://osrm-bicycle:5000
+  OSRM_PROFILE: bicycle
+  OSRM_REGION: east-java
+
+x-backend-service: &backend-service
+  image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to the GHCR image, for example ghcr.io/owner/dashly-backend:latest}
+  pull_policy: always
+  init: true
+  env_file:
+    - .env
+  environment: *backend-environment
+  security_opt:
+    - no-new-privileges:true
+  networks:
+    - dashly-network
+
 services:
   app:
-    build: .
-    container_name: dashly_backend
-    restart: always
-    env_file:
-      - .env
-    environment:
-      NODE_ENV: production
-    volumes:
-      - ./.env:/app/.env:ro
-    ports:
-      - "127.0.0.1:3000:3000"
+    <<: *backend-service
+    depends_on:
+      - redis
+      - osrm-bicycle
+    expose:
+      - '3000'
+    networks:
+      - dashly-network
+    labels:
+      - traefik.http.services.dashly-backend-fdjkqy-1-web.loadbalancer.sticky.cookie.name=dashly_api
+      - traefik.http.services.dashly-backend-fdjkqy-1-web.loadbalancer.sticky.cookie.httpOnly=true
+      - traefik.http.services.dashly-backend-fdjkqy-1-web.loadbalancer.sticky.cookie.sameSite=none
+      - traefik.http.services.dashly-backend-fdjkqy-1-websecure.loadbalancer.sticky.cookie.name=dashly_api
+      - traefik.http.services.dashly-backend-fdjkqy-1-websecure.loadbalancer.sticky.cookie.httpOnly=true
+      - traefik.http.services.dashly-backend-fdjkqy-1-websecure.loadbalancer.sticky.cookie.secure=true
+      - traefik.http.services.dashly-backend-fdjkqy-1-websecure.loadbalancer.sticky.cookie.sameSite=none
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/sync').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+
+  worker:
+    <<: *backend-service
+    command: ['bun', 'dist/src/process.js', 'worker']
+    depends_on:
+      - redis
+      - osrm-bicycle
+    deploy:
+      replicas: ${WORKER_REPLICAS:-2}
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+
+  ingest:
+    <<: *backend-service
+    command: ['bun', 'dist/src/process.js', 'ingest']
     depends_on:
       - redis
       - mosquitto
-    mem_limit: 768m
+      - osrm-bicycle
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 512M
+
+  scheduler:
+    <<: *backend-service
+    command: ['bun', 'dist/src/process.js', 'scheduler']
+    depends_on:
+      - redis
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  redis:
+    image: redis:8.8.0-alpine
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+      - --appendonly
+      - 'yes'
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - noeviction
+      - --loglevel
+      - warning
+    volumes:
+      - redis_data:/data
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$${REDIS_PASSWORD}" ping | grep -q PONG']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 192M
     networks:
       - dashly-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: dashly_redis
-    restart: always
-    command: redis-server --save 60 1 --loglevel warning --maxmemory 128mb --maxmemory-policy allkeys-lru
-    ports:
-      - "127.0.0.1:6379:6379"
+  osrm-bicycle:
+    image: ghcr.io/project-osrm/osrm-backend:v26.7.3-debian
+    command: osrm-routed --algorithm mld --threads 2 /data/east-java.osrm
     volumes:
-      - redis_data:/data
-    mem_limit: 160m
+      - osrm_east_java_data:/data
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/5000; printf \"GET /route/v1/bicycle/112.7508,-7.2575;112.7525,-7.2590?overview=false HTTP/1.0\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
     networks:
       - dashly-network
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.22
+    configs:
+      - source: mosquitto_config
+        target: /mosquitto/config/mosquitto.conf
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          'CMD-SHELL',
+          'mosquitto_sub -h 127.0.0.1 -t $$SYS/broker/version -C 1 -W 3 >/dev/null 2>&1',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  mosquitto:
-    image: eclipse-mosquitto:latest
-    container_name: dashly_mosquitto
-    restart: always
-    ports:
-      - "1883:1883"
-    volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-    mem_limit: 64m
+      start_period: 5s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 96M
     networks:
       - dashly-network
 
+configs:
+  mosquitto_config:
+    file: ./mosquitto.conf
+
 networks:
   dashly-network:
-    driver: bridge
+    driver: overlay
+    attachable: true
 
 volumes:
   redis_data:
+  osrm_east_java_data:
+    external: true
+    name: dashly-osrm-east-java-test
+  osrm_bicycle_rollback:
+    external: true
+    name: dashly-osrm-bicycle
+  mosquitto_data:
+  mosquitto_log:

@@ -14,8 +14,6 @@ export class SosConsumer {
   private readonly logger = new Logger(SosConsumer.name);
 
   onModuleInit() {
-    this.logger.log(
-      'SOS audit consumer registered (placeholder — no worker active)',
-    );
+    this.logger.log('SOS audit consumer registered (placeholder — no worker active)');
   }
 }

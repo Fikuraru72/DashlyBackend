@@ -1,54 +1,79 @@
+import { Emitter } from '@socket.io/redis-emitter';
+import { Inject, Logger, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import {
-  WebSocketGateway,
-  WebSocketServer,
-  SubscribeMessage,
-  MessageBody,
   ConnectedSocket,
+  MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
 } from '@nestjs/websockets';
+import { and, eq, isNull } from 'drizzle-orm';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import Redis from 'ioredis';
+
+import { getRedisOptions } from '../redis/redis-options';
 import { Server, Socket } from 'socket.io';
-import { Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { Interval } from '@nestjs/schedule';
+
+import { DB_CONNECTION } from '../../db/database.module';
+import * as schema from '../../db/schema';
+import { AuthenticatedUser, JwtPayload } from '../auth/strategies/jwt.strategy';
+
+interface AuthenticatedSocket extends Socket {
+  data: { user?: AuthenticatedUser };
+}
 
 @WebSocketGateway({
-  cors: {
-    origin: true, // Allow any origin dynamically, supporting local IP accesses (192.168.x.x)
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-  transports: ['websocket', 'polling'], // Explicitly allow protocol upgrades
+  cors: { origin: true, methods: ['GET', 'POST'], credentials: true },
+  transports: ['websocket', 'polling'],
 })
-export class EventsGateway
-  implements
-    OnGatewayConnection,
-    OnGatewayDisconnect,
-    OnModuleInit,
-    OnModuleDestroy
-{
+export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer()
-  server!: Server;
+  server?: Server;
 
-  private logger: Logger = new Logger('EventsGateway');
+  private readonly logger = new Logger(EventsGateway.name);
+  private readonly redis: Redis;
+  private readonly emitter: Emitter;
 
-  // Accumulator: keyed by eventId, holds latest position per participantId
-  private positionBuffer: Map<number, Map<number, any>> = new Map();
-  private flushInterval: NodeJS.Timeout | null = null;
-  private readonly FLUSH_INTERVAL_MS = 2000; // Emit every 2 seconds
-
-  onModuleInit() {
-    this.flushInterval = setInterval(
-      () => this.flushPositionBuffer(),
-      this.FLUSH_INTERVAL_MS,
-    );
+  constructor(
+    private readonly jwtService: JwtService,
+    configService: ConfigService,
+    @Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>,
+  ) {
+    this.redis = new Redis(getRedisOptions(configService));
+    this.emitter = new Emitter(this.redis);
   }
 
-  onModuleDestroy() {
-    if (this.flushInterval) clearInterval(this.flushInterval);
+  async onModuleDestroy() {
+    await this.redis.quit();
   }
 
-  handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}`);
+  handleConnection(client: AuthenticatedSocket) {
+    const token = client.handshake.auth?.token;
+    if (token === undefined) {
+      this.logger.log(`Public client connected: ${client.id}`);
+      return;
+    }
+
+    try {
+      if (typeof token !== 'string') throw new Error('Invalid token');
+      const payload = this.jwtService.verify<JwtPayload>(token);
+      if (payload.tokenType !== 'access' || !payload.email || !payload.role) {
+        throw new Error('Wrong token type');
+      }
+      client.data.user = {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role,
+      };
+      this.logger.log(`Authenticated client connected: ${client.id}`);
+    } catch {
+      client.emit('auth_error', { message: 'Invalid access token' });
+      client.disconnect(true);
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -56,130 +81,134 @@ export class EventsGateway
   }
 
   @SubscribeMessage('joinEventRoom')
-  handleJoinRoom(
+  async handleJoinRoom(
     @MessageBody() data: { eventId: number },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthenticatedSocket,
   ) {
-    const room = `event_${data.eventId}`;
-    client.join(room);
+    const eventId = data?.eventId;
+    const user = client.data.user;
+    if (!user || !Number.isInteger(eventId) || eventId <= 0) {
+      return { event: 'joinError', data: 'Invalid event room request' };
+    }
+    if (!(await this.canAccessEvent(user, eventId))) {
+      return { event: 'joinError', data: 'Event access denied' };
+    }
+
+    const room = `event_${eventId}`;
+    await client.join(room);
     this.logger.log(`Client ${client.id} joined room: ${room}`);
     return { event: 'joinedRoom', data: room };
   }
 
-  @SubscribeMessage('leaveEventRoom')
-  handleLeaveRoom(
+  @SubscribeMessage('joinPublicEventRoom')
+  async handleJoinPublicRoom(
     @MessageBody() data: { eventId: number },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    const eventId = data?.eventId;
+    if (!Number.isInteger(eventId) || eventId <= 0) {
+      return { event: 'joinError', data: 'Invalid public event room request' };
+    }
+    const event = await this.db.query.events.findFirst({
+      where: and(eq(schema.events.id, eventId), isNull(schema.events.deletedAt)),
+      columns: { id: true },
+    });
+    if (!event) return { event: 'joinError', data: 'Event not found' };
+
+    const room = `public_event_${eventId}`;
+    await client.join(room);
+    return { event: 'joinedRoom', data: room };
+  }
+
+  @SubscribeMessage('leaveEventRoom')
+  async handleLeaveRoom(
+    @MessageBody() data: { eventId: number },
+    @ConnectedSocket() client: AuthenticatedSocket,
   ) {
     const room = `event_${data.eventId}`;
-    client.leave(room);
-    this.logger.log(`Client ${client.id} left room: ${room}`);
+    await client.leave(room);
     return { event: 'leftRoom', data: room };
   }
 
-  // Called by MqttService — buffers the update instead of emitting immediately
-  broadcastPositionUpdate(eventId: number, payload: any) {
-    const data = {
-      ...payload,
-      lat: parseFloat(payload.lat),
-      lng: parseFloat(payload.lng),
-    };
-
-    if (!this.positionBuffer.has(eventId)) {
-      this.positionBuffer.set(eventId, new Map());
-    }
-    // Always overwrite with the latest point per participant (deduplicates rapid updates)
-    this.positionBuffer
-      .get(eventId)!
-      .set(data.participantId || data.userId, data);
+  @SubscribeMessage('leavePublicEventRoom')
+  async handleLeavePublicRoom(
+    @MessageBody() data: { eventId: number },
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    const room = `public_event_${data.eventId}`;
+    await client.leave(room);
+    return { event: 'leftRoom', data: room };
   }
 
-  // Flush accumulated updates to dashboards every 2 seconds
-  @Interval(2000)
-  private flushPositionBuffer() {
-    for (const [eventId, userMap] of this.positionBuffer.entries()) {
-      if (userMap.size > 0) {
-        this.logger.debug(`[WS] Flush triggered for event ${eventId}, buffered positions: ${userMap.size}`);
-      }
-      if (userMap.size === 0) continue;
-
-      const room = `event_${eventId}`;
-      const roomClients = this.server.sockets.adapter.rooms.get(room);
-      if (!roomClients || roomClients.size === 0) {
-        userMap.clear();
-        continue;
-      }
-
-      // Send all participant positions as a single batch emission
-      const positions = Array.from(userMap.values());
-      this.server.to(room).emit('position_batch', { eventId, positions });
-      this.logger.log(
-        `[WS EMIT] 📡 position_batch → room: ${room} (${roomClients.size} clients, ${positions.length} positions)`,
+  private async canAccessEvent(user: AuthenticatedUser, eventId: number) {
+    if (user.role === 'SUPER_ADMIN') return true;
+    if (user.role === 'STAFF') {
+      return Boolean(
+        await this.db.query.eventStaff.findFirst({
+          where: and(eq(schema.eventStaff.eventId, eventId), eq(schema.eventStaff.userId, user.id)),
+        }),
       );
-
-      userMap.clear();
     }
+    if (user.role === 'PARTICIPANT') {
+      return Boolean(
+        await this.db.query.eventParticipants.findFirst({
+          where: and(
+            eq(schema.eventParticipants.eventId, eventId),
+            eq(schema.eventParticipants.userId, user.id),
+          ),
+        }),
+      );
+    }
+    return false;
+  }
+
+  broadcastPositionUpdate(eventId: number, payload: any) {
+    const update = {
+      eventId,
+      positions: [{ ...payload, lat: Number(payload.lat), lng: Number(payload.lng) }],
+    };
+    this.emit(eventId, 'position_batch', update);
+    this.emitPublic(eventId, 'position_batch', update);
+  }
+
+  private emit(eventId: number, event: string, payload: unknown) {
+    this.emitter.to(`event_${eventId}`).emit(event, payload);
+  }
+
+  private emitPublic(eventId: number, event: string, payload: unknown) {
+    this.emitter.to(`public_event_${eventId}`).emit(event, payload);
   }
 
   broadcastAnomalyDetected(eventId: number, payload: any) {
-    const room = `event_${eventId}`;
-    const roomClients = this.server.sockets.adapter.rooms.get(room);
-    if (roomClients && roomClients.size > 0) {
-      this.logger.warn(
-        `[WS Out] -> ${room}: Broadcasting anomaly_detected: ${payload.type}`,
-      );
-      this.server.to(room).emit('anomaly_detected', payload);
-    }
+    this.emit(eventId, 'anomaly_detected', payload);
   }
-
   broadcastSyncBatch(eventId: number, userId: number, payload: any[]) {
-    const room = `event_${eventId}`;
-    const roomClients = this.server.sockets.adapter.rooms.get(room);
-    if (roomClients && roomClients.size > 0) {
-      this.server
-        .to(room)
-        .emit('sync_batch', { userId, eventId, points: payload });
-    }
+    this.emit(eventId, 'sync_batch', { userId, eventId, points: payload });
   }
-
+  broadcastSosTriggered(eventId: number, payload: any) {
+    this.emit(eventId, 'sos_triggered', payload);
+  }
   broadcastSosRecovered(eventId: number, payload: any) {
-    const room = `event_${eventId}`;
-    this.server.to(room).emit('sos_recovered', payload);
+    this.emit(eventId, 'sos_recovered', payload);
   }
-
-  // Called to broadcast detected anomalies to the dashboard
   broadcastAnomaly(eventId: number, payload: any) {
-    const room = `event_${eventId}`;
-    this.server.to(room).emit('anomaly_detected', payload);
+    this.emit(eventId, 'anomaly_detected', payload);
   }
-
-  // Called to broadcast event status changes (Auto Start/End)
   broadcastEventStatus(eventId: number, status: string) {
-    const room = `event_${eventId}`;
-    this.server.to(room).emit('EVENT_STATUS_CHANGED', { status });
+    const payload = { status };
+    this.emit(eventId, 'EVENT_STATUS_CHANGED', payload);
+    this.emitPublic(eventId, 'EVENT_STATUS_CHANGED', payload);
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  PHASE 1: INTELLIGENCE LAYER BROADCASTS
-  // ═══════════════════════════════════════════════════════════════
-
   broadcastRankingUpdate(eventId: number, payload: any) {
-    const room = `event_${eventId}`;
-    this.server.to(room).emit('ranking_update', payload);
+    this.emit(eventId, 'ranking_update', payload);
   }
-
   broadcastOffRouteAlert(eventId: number, payload: any) {
-    const room = `event_${eventId}`;
-    this.server.to(room).emit('off_route_alert', payload);
+    this.emit(eventId, 'off_route_alert', payload);
   }
-
   broadcastUserStopped(eventId: number, payload: any) {
-    const room = `event_${eventId}`;
-    this.server.to(room).emit('user_stopped', payload);
+    this.emit(eventId, 'user_stopped', payload);
   }
-
   broadcastParticipantFinished(eventId: number, payload: any) {
-    const room = `event_${eventId}`;
-    this.server.to(room).emit('participant_finished', payload);
+    this.emit(eventId, 'participant_finished', payload);
   }
 }

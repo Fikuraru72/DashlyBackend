@@ -1,15 +1,14 @@
+import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
 import * as bcrypt from 'bcrypt';
-import { eq } from 'drizzle-orm';
 import { ulid } from 'ulid';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
 // Utility for generating tokens
-const generateToken = () =>
-  Math.random().toString(36).substring(2, 8).toUpperCase();
+const generateToken = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
 // Valid GeoJSON LineString for mock
 const getMockRoute = () => ({
@@ -185,13 +184,13 @@ async function seed() {
         locationName: 'Bundaran HI',
         city: 'Jakarta',
         province: 'DKI Jakarta',
-        latitude: -6.1950,
-        longitude: 106.8230,
+        latitude: -6.195,
+        longitude: 106.823,
         bannerImage: 'https://images.unsplash.com/photo-1541252874136-1e96e70a241e?w=800&q=80',
         monitoringStartOffset: 60,
         monitoringEndOffset: 240,
         currentCount: 0,
-      }
+      },
     ];
 
     const eventMap: Record<string, number> = {};
@@ -202,10 +201,7 @@ async function seed() {
       });
 
       if (!event) {
-        const [insertedEvent] = await db
-          .insert(schema.events)
-          .values(evtData)
-          .returning();
+        const [insertedEvent] = await db.insert(schema.events).values(evtData).returning();
         event = insertedEvent;
         console.log(`Created event: ${evtData.name}`);
       }
@@ -234,8 +230,10 @@ async function seed() {
           });
 
           const existingParticipant = await db.query.eventParticipants.findFirst({
-            where: (ep, { and, eq }) =>
-              and(eq(ep.eventId, eventId), eq(ep.userId, userId)),
+            where: and(
+              eq(schema.eventParticipants.eventId, eventId),
+              eq(schema.eventParticipants.userId, userId),
+            ),
           });
 
           if (!existingParticipant) {
@@ -276,8 +274,10 @@ async function seed() {
     const activeUserId = userMap['participant1@dashly.com'];
 
     const existingLogs = await db.query.locationLogs.findMany({
-      where: (ll, { and, eq }) =>
-        and(eq(ll.eventId, liveEventId), eq(ll.userId, activeUserId)),
+      where: and(
+        eq(schema.locationLogs.eventId, liveEventId),
+        eq(schema.locationLogs.userId, activeUserId),
+      ),
       limit: 1,
     });
 
@@ -304,13 +304,10 @@ async function seed() {
       });
 
       await db.insert(schema.locationLogs).values(mockLogs);
-      console.log(
-        `Created 15 mock location logs for user ${activeUserId} in event ${liveEventId}`,
-      );
+      console.log(`Created 15 mock location logs for user ${activeUserId} in event ${liveEventId}`);
     } else {
       console.log('Location logs already exist, skipping...');
     }
-
 
     console.log('Seeding completed successfully! 🚀');
   } catch (error) {
@@ -321,4 +318,4 @@ async function seed() {
   }
 }
 
-seed();
+void seed();
