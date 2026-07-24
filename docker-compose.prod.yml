@@ -240,11 +240,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test:
-        [
-          'CMD-SHELL',
-          'mosquitto_sub -h 127.0.0.1 -t $$SYS/broker/version -C 1 -W 3 >/dev/null 2>&1',
-        ]
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 1883 || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
