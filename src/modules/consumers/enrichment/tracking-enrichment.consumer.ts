@@ -231,6 +231,42 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
     event.distanceDelta = distanceDelta;
     event.speedCalculated = speedCalculated;
 
+    // ── 5b. OSRM Map Matching — Snap GPS to Road Network ────────
+    // Uses the last N points from the replay buffer for better HMM accuracy.
+    // If OSRM is not configured or fails, falls back to raw GPS.
+    try {
+      const recentEvents = await this.redisService.getReplayBuffer(participantId);
+      const recentPoints: { lng: number; lat: number; timestamp: number }[] = [];
+
+      // Use up to last 5 points (newest first from Redis, so reverse)
+      const pointsToUse = recentEvents.slice(0, 5).reverse();
+      pointsToUse.forEach((e: any) => {
+        const eLat = typeof e.lat === 'number' ? e.lat : parseFloat(e.lat);
+        const eLng = typeof e.lng === 'number' ? e.lng : parseFloat(e.lng);
+        const eTs = typeof e.capturedAt === 'number' ? e.capturedAt : new Date(e.capturedAt).getTime();
+        if (!isNaN(eLat) && !isNaN(eLng) && !isNaN(eTs)) {
+          recentPoints.push({ lat: eLat, lng: eLng, timestamp: eTs });
+        }
+      });
+
+      // Add the current point at the end
+      recentPoints.push({ lat, lng, timestamp: capturedAtMs });
+
+      if (recentPoints.length >= 2) {
+        const snapped = await this.osrmService.matchTrajectory(recentPoints);
+        if (snapped) {
+          event.lat = snapped.lat;
+          event.lng = snapped.lng;
+          this.logger.debug(
+            `[OSRM] Snapped participant ${participantId}: raw=(${lat.toFixed(6)},${lng.toFixed(6)}) → snapped=(${snapped.lat.toFixed(6)},${snapped.lng.toFixed(6)})`,
+          );
+        }
+      }
+    } catch (osrmErr) {
+      // Non-fatal: just use raw GPS
+      this.logger.warn(`[OSRM] matchTrajectory failed for participant ${participantId}: ${(osrmErr as Error).message}`);
+    }
+
     // ── 6. Event Intelligence Layer (HARDENED) ───────────────────
     const route = await this.getRoute(eventId);
     if (route) {

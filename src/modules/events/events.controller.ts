@@ -10,7 +10,9 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { EventsService } from './events.service';
 import { GpxParserService } from './gpx-parser.service';
@@ -165,5 +167,20 @@ export class EventsController {
     @Body() body: UpdateParticipantStateDto,
   ) {
     return this.eventsService.updateParticipantState(+eventId, +participantId, body.state);
+  }
+
+  @Get(':id/telemetry-report')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async getTelemetryReport(@Param('id') id: string, @Res() res: Response) {
+    const buffer = await this.eventsService.generateTelemetryReport(+id);
+    
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename=telemetry-report-event-${id}.xlsx`,
+      'Content-Length': buffer.byteLength,
+    });
+    
+    // We send a Buffer directly so Express will pipe it to the response
+    res.end(Buffer.from(buffer));
   }
 }

@@ -36,24 +36,45 @@ export class DbWriterConsumer implements OnModuleInit, OnModuleDestroy {
     await this.workerConnection?.quit();
   }
 
-  private async persist(event: TrackingEvent): Promise<void> {
-    await this.db
-      .insert(schema.locationLogs)
-      .values({
-        messageId: event.messageId,
-        userId: event.userId,
-        participantId: event.participantId,
-        eventId: event.eventId,
-        latitude: event.intelligence?.snappedLat ?? event.lat,
-        longitude: event.intelligence?.snappedLng ?? event.lng,
-        altitude: event.altitude,
-        speed: event.speedFromClient,
-        distanceDelta: event.distanceDelta,
-        speedCalculated: event.speedCalculated,
-        isAnomaly: event.flags.isAnomaly,
-        isOffline: event.flags.isOffline,
-        capturedAt: new Date(event.capturedAt),
-      })
-      .onConflictDoNothing({ target: [schema.locationLogs.messageId] });
+  private async flush(): Promise<void> {
+    if (this.buffer.length === 0) return;
+
+    const batch = this.buffer.splice(0);
+
+    try {
+      const mapped = batch.map((e) => ({
+        messageId: e.messageId,
+        userId: e.userId,
+        participantId: e.participantId,
+        eventId: e.eventId,
+        latitude: e.intelligence?.snappedLat ?? e.lat,
+        longitude: e.intelligence?.snappedLng ?? e.lng,
+        altitude: e.altitude,
+        speed: e.speedFromClient,
+        battery: e.battery ?? null,
+        distanceDelta: e.distanceDelta,
+        speedCalculated: e.speedCalculated,
+        isAnomaly: e.flags.isAnomaly,
+        isOffline: e.flags.isOffline,
+        capturedAt: new Date(e.capturedAt),
+        serverReceivedAt: new Date(e.serverReceivedAt),
+      }));
+
+      await this.db
+        .insert(schema.locationLogs)
+        .values(mapped)
+        .onConflictDoNothing({ target: [schema.locationLogs.messageId] });
+
+      this.logger.log(
+        `[DB Writer] ✅ Batched ${mapped.length} location logs to PostgreSQL`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `[DB Writer] ❌ Batch insert failed (${batch.length} rows):`,
+        error,
+      );
+      // Re-add to buffer for next attempt (simple retry)
+      this.buffer.unshift(...batch);
+    }
   }
 }

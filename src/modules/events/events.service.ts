@@ -20,6 +20,7 @@ import { OsrmService } from './osrm.service';
 import { JwtService } from '@nestjs/jwt';
 import * as qrcode from 'qrcode';
 import * as bcrypt from 'bcrypt';
+import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class EventsService {
@@ -219,6 +220,8 @@ export class EventsService {
         startTime: true,
         endTime: true,
         routeGeojson: true,
+        altitudeProfile: true,
+        totalElevationMeters: true,
       },
     });
 
@@ -253,6 +256,8 @@ export class EventsService {
         startTime: event.startTime,
         endTime: event.endTime,
         routeGeojson: event.routeGeojson,
+        altitudeProfile: event.altitudeProfile,
+        totalElevationMeters: event.totalElevationMeters,
       },
     };
   }
@@ -903,5 +908,136 @@ export class EventsService {
         participantState: participant.participantState,
       },
     };
+  }
+
+  async generateTelemetryReport(eventId: number): Promise<Buffer> {
+    const event = await this.db.query.events.findFirst({
+      where: and(eq(schema.events.id, eventId), isNull(schema.events.deletedAt)),
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const participants = await this.db.query.eventParticipants.findMany({
+      where: eq(schema.eventParticipants.eventId, eventId),
+      with: {
+        user: true,
+      },
+    });
+
+    const logs = await this.db.query.locationLogs.findMany({
+      where: eq(schema.locationLogs.eventId, eventId),
+      orderBy: asc(schema.locationLogs.capturedAt),
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Dashly System';
+    workbook.created = new Date();
+
+    const summarySheet = workbook.addWorksheet('Summary');
+    summarySheet.columns = [
+      { header: 'BIB', key: 'bib', width: 10 },
+      { header: 'Name', key: 'name', width: 25 },
+      { header: 'Role', key: 'role', width: 15 },
+      { header: 'Total Pings', key: 'totalPings', width: 15 },
+      { header: 'Start Time', key: 'startTime', width: 25 },
+      { header: 'End Time', key: 'endTime', width: 25 },
+      { header: 'Avg Latency (ms)', key: 'avgLatency', width: 20 },
+      { header: 'Max Latency (ms)', key: 'maxLatency', width: 20 },
+      { header: 'Start Battery (%)', key: 'startBattery', width: 20 },
+      { header: 'End Battery (%)', key: 'endBattery', width: 20 },
+      { header: 'Battery Drain (%)', key: 'batteryDrain', width: 20 },
+    ];
+
+    const rawSheet = workbook.addWorksheet('Raw Data');
+    rawSheet.columns = [
+      { header: 'BIB', key: 'bib', width: 10 },
+      { header: 'Name', key: 'name', width: 25 },
+      { header: 'Captured At', key: 'capturedAt', width: 25 },
+      { header: 'Server Received At', key: 'serverReceivedAt', width: 25 },
+      { header: 'Latency (ms)', key: 'latency', width: 15 },
+      { header: 'Battery (%)', key: 'battery', width: 15 },
+      { header: 'Speed (m/s)', key: 'speed', width: 15 },
+      { header: 'Is Anomaly', key: 'isAnomaly', width: 15 },
+      { header: 'Is Offline', key: 'isOffline', width: 15 },
+    ];
+
+    const participantMap = new Map();
+    for (const p of participants) {
+      participantMap.set(p.id, {
+        bib: p.bibNumber,
+        name: (p as any).user?.name || 'Unknown',
+        role: 'Participant',
+        totalPings: 0,
+        startTime: null,
+        endTime: null,
+        latencies: [],
+        startBattery: null,
+        endBattery: null,
+      });
+    }
+
+    for (const log of logs) {
+      if (!log.participantId) continue;
+      
+      const pStats = participantMap.get(log.participantId);
+      if (!pStats) continue;
+
+      const capturedAt = new Date(log.capturedAt);
+      const serverReceivedAt = new Date(log.serverReceivedAt);
+      
+      const latencyMs = Math.max(0, serverReceivedAt.getTime() - capturedAt.getTime());
+
+      rawSheet.addRow({
+        bib: pStats.bib,
+        name: pStats.name,
+        capturedAt: capturedAt.toISOString(),
+        serverReceivedAt: serverReceivedAt.toISOString(),
+        latency: latencyMs,
+        battery: log.battery ?? '-',
+        speed: log.speed ?? '-',
+        isAnomaly: log.isAnomaly ? 'Yes' : 'No',
+        isOffline: log.isOffline ? 'Yes' : 'No',
+      });
+
+      pStats.totalPings++;
+      pStats.latencies.push(latencyMs);
+
+      if (!pStats.startTime) pStats.startTime = capturedAt;
+      pStats.endTime = capturedAt;
+
+      if (log.battery != null) {
+        if (pStats.startBattery == null) pStats.startBattery = log.battery;
+        pStats.endBattery = log.battery;
+      }
+    }
+
+    for (const pStats of participantMap.values()) {
+      if (pStats.totalPings === 0) continue;
+
+      const avgLatency = pStats.latencies.reduce((a: number, b: number) => a + b, 0) / pStats.latencies.length;
+      const maxLatency = Math.max(...pStats.latencies);
+      const batteryDrain = (pStats.startBattery != null && pStats.endBattery != null) 
+        ? pStats.startBattery - pStats.endBattery 
+        : null;
+
+      summarySheet.addRow({
+        bib: pStats.bib,
+        name: pStats.name,
+        role: pStats.role,
+        totalPings: pStats.totalPings,
+        startTime: pStats.startTime ? pStats.startTime.toISOString() : '-',
+        endTime: pStats.endTime ? pStats.endTime.toISOString() : '-',
+        avgLatency: Math.round(avgLatency),
+        maxLatency: maxLatency,
+        startBattery: pStats.startBattery ?? '-',
+        endBattery: pStats.endBattery ?? '-',
+        batteryDrain: batteryDrain ?? '-',
+      });
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as unknown as Buffer;
   }
 }
