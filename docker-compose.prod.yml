@@ -27,6 +27,7 @@ services:
   app:
     <<: *backend-service
     depends_on:
+      - postgres
       - redis
       - osrm-bicycle
     expose:
@@ -73,6 +74,7 @@ services:
     <<: *backend-service
     command: ['bun', 'dist/src/process.js', 'worker']
     depends_on:
+      - postgres
       - redis
       - osrm-bicycle
     deploy:
@@ -88,6 +90,7 @@ services:
     <<: *backend-service
     command: ['bun', 'dist/src/process.js', 'ingest']
     depends_on:
+      - postgres
       - redis
       - mosquitto
       - osrm-bicycle
@@ -104,6 +107,7 @@ services:
     <<: *backend-service
     command: ['bun', 'dist/src/process.js', 'scheduler']
     depends_on:
+      - postgres
       - redis
     deploy:
       replicas: 1
@@ -150,6 +154,34 @@ services:
         limits:
           cpus: '0.25'
           memory: 192M
+    networks:
+      - dashly-network
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      TZ: Asia/Jakarta
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dashly -d dashly"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
     networks:
       - dashly-network
 
@@ -222,6 +254,7 @@ networks:
     attachable: true
 
 volumes:
+  postgres_data:
   redis_data:
   osrm_east_java_data:
     external: true
