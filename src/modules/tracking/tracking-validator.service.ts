@@ -33,9 +33,10 @@ export class TrackingValidatorService {
    * Returns true if the event was published to the raw queue, false if dropped.
    */
   async processLocation(raw: RawIngestPayload): Promise<boolean> {
-    // 1. Check event status
+    // 1. Check event status (allow active/testing statuses)
     const eventStatus = await this.eventCache.getEventStatus(raw.eventId);
-    if (eventStatus !== 'LIVE') {
+    const inactiveStatuses = ['FINISHED', 'CANCELLED'];
+    if (!eventStatus || inactiveStatuses.includes(eventStatus)) {
       this.logger.debug(
         `[Validator] Dropping: event ${raw.eventId} status is '${eventStatus || 'NOT_FOUND'}'`,
       );
