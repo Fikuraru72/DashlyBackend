@@ -148,7 +148,7 @@ export class AuthService {
   private generateToken(user: typeof schema.users.$inferSelect, roleName: string) {
     const accessToken = this.jwtService.sign(
       { sub: user.id, email: user.email, role: roleName, tokenType: 'access' },
-      { expiresIn: '15m' },
+      { expiresIn: this.configService.get('JWT_EXPIRES_IN', '7d') },
     );
     const refreshToken = this.jwtService.sign(
       { sub: user.id, tokenType: 'refresh' },
