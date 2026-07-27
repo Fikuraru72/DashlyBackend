@@ -69,8 +69,12 @@ export class WsPublisherConsumer implements OnModuleInit, OnModuleDestroy {
           lat: event.intelligence?.snappedLat ?? event.lat,
           lng: event.intelligence?.snappedLng ?? event.lng,
           routeIndex: event.intelligence?.routeIndex,
-          ...(event.intelligence?.routeDistance != null && { routeDistance: event.intelligence.routeDistance }),
-          ...(event.intelligence?.routeElevation != null && { routeElevation: event.intelligence.routeElevation }),
+          ...(event.intelligence?.routeDistance != null && {
+            routeDistance: event.intelligence.routeDistance,
+          }),
+          ...(event.intelligence?.routeElevation != null && {
+            routeElevation: event.intelligence.routeElevation,
+          }),
           altitude: event.altitude,
           elevationGain: event.intelligence?.elevationGain,
           minAltitude: event.intelligence?.minAltitude,
