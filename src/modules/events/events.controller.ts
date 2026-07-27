@@ -175,6 +175,26 @@ export class EventsController {
     return this.eventsService.updateParticipantState(+eventId, +participantId, body.state);
   }
 
+  @Delete(':eventId/anomalies/user/:userId')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async deleteAnomaliesByUserId(
+    @Param('eventId') eventId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.eventsService.deleteAnomaliesByUserId(+eventId, +userId);
+  }
+
+  @Delete(':eventId/anomalies/:anomalyId')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async deleteAnomaly(@Param('eventId') eventId: string, @Param('anomalyId') anomalyId: string) {
+    const rawId = anomalyId.replace('db-anomaly-', '');
+    const numericId = parseInt(rawId, 10);
+    if (isNaN(numericId)) {
+      return { success: true, message: 'Ephemeral anomaly dismissed' };
+    }
+    return this.eventsService.deleteAnomaly(+eventId, numericId);
+  }
+
   @Get(':id/telemetry-report')
   @Roles('SUPER_ADMIN', 'STAFF')
   async getTelemetryReport(@Param('id') id: string, @Res() res: Response) {

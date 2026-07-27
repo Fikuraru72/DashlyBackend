@@ -886,6 +886,13 @@ export class EventsService {
 
     await this.redisService.setParticipantStateOnly(eventId, participant.id, newState);
 
+    if (newState === 'TRACKING') {
+      // Automatically clear any persisted anomaly records when unfreezing participant
+      await this.db
+        .delete(schema.anomalies)
+        .where(and(eq(schema.anomalies.userId, userId), eq(schema.anomalies.eventId, eventId)));
+    }
+
     return {
       success: true,
       data: updated,
@@ -904,6 +911,15 @@ export class EventsService {
     }
 
     return { success: true, data: deleted };
+  }
+
+  async deleteAnomaliesByUserId(eventId: number, userId: number) {
+    const deleted = await this.db
+      .delete(schema.anomalies)
+      .where(and(eq(schema.anomalies.userId, userId), eq(schema.anomalies.eventId, eventId)))
+      .returning();
+
+    return { success: true, count: deleted.length };
   }
 
   async deleteAnomalyByType(eventId: number, userId: number, type: string) {
