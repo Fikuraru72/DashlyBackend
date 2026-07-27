@@ -76,7 +76,7 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
     // ── Load feature flags from environment ──────────────────────
     this.enableRanking = this.configService.get('ENABLE_RANKING', 'true') !== 'false';
     this.enableOffRoute = this.configService.get('ENABLE_OFFROUTE', 'true') !== 'false';
-    this.enableStopDetection = false;
+    this.enableStopDetection = this.configService.get('ENABLE_STOP_DETECTION', 'true') !== 'false';
 
     this.logger.log(
       `Feature flags: ranking=${this.enableRanking}, offRoute=${this.enableOffRoute}, stopDetection=${this.enableStopDetection}`,
@@ -284,7 +284,7 @@ export class TrackingEnrichmentConsumer implements OnModuleInit, OnModuleDestroy
         roadMatchedPosition = await this.osrmService.snapNearest(lat, lng);
       }
 
-      const progressResult = await this.progressEngine.compute(event, route);
+      const progressResult = await this.progressEngine.compute({ ...event, lat, lng }, route);
       if (
         roadMatchedPosition &&
         this.calculateHaversineDistance(

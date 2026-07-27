@@ -89,6 +89,49 @@ export class EventsService {
     }, {});
   }
 
+  async getEventAnomalies(eventId: number) {
+    const anomalyRows = await this.db
+      .select({
+        id: schema.anomalies.id,
+        eventId: schema.anomalies.eventId,
+        userId: schema.anomalies.userId,
+        type: schema.anomalies.type,
+        latitude: schema.anomalies.latitude,
+        longitude: schema.anomalies.longitude,
+        reason: schema.anomalies.reason,
+        timestamp: schema.anomalies.timestamp,
+        name: schema.users.name,
+        bibNumber: schema.eventParticipants.bibNumber,
+      })
+      .from(schema.anomalies)
+      .leftJoin(schema.users, eq(schema.anomalies.userId, schema.users.id))
+      .leftJoin(
+        schema.eventParticipants,
+        and(
+          eq(schema.eventParticipants.eventId, eventId),
+          eq(schema.eventParticipants.userId, schema.anomalies.userId),
+        ),
+      )
+      .where(eq(schema.anomalies.eventId, eventId))
+      .orderBy(asc(schema.anomalies.timestamp));
+
+    return anomalyRows.map((a) => ({
+      id: `db-anomaly-${a.id}`,
+      eventId: a.eventId,
+      userId: String(a.userId),
+      participantId: String(a.userId),
+      type: a.type,
+      lat: a.latitude,
+      lng: a.longitude,
+      reason: a.reason,
+      message: a.reason,
+      timestamp: a.timestamp ? new Date(a.timestamp).toISOString() : new Date().toISOString(),
+      name: a.name || `Runner ${a.userId}`,
+      bibNumber: a.bibNumber || '-',
+      severity: a.type === 'SOS_EMERGENCY' ? 'HIGH' : 'MEDIUM',
+    }));
+  }
+
   async createEvent(user: any, dto: CreateEventDto) {
     const category = (dto.category as 'RUNNING' | 'CYCLING') || 'RUNNING';
     const normalizedRoute = dto.routeGeojson
