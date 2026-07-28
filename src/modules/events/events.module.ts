@@ -6,12 +6,13 @@ import { DatabaseModule } from '../../db/database.module';
 import { RedisModule } from '../redis/redis.module';
 import { GpxParserService } from './gpx-parser.service';
 import { OsrmService } from './osrm.service';
+import { RoutePreprocessorService } from './route-preprocessor.service';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [DatabaseModule, RedisModule, AuthModule],
-  providers: [EventsService, GpxParserService, OsrmService],
+  providers: [EventsService, GpxParserService, OsrmService, RoutePreprocessorService],
   controllers: [EventsController, PublicEventsController],
-  exports: [EventsService, GpxParserService, OsrmService],
+  exports: [EventsService, GpxParserService, OsrmService, RoutePreprocessorService],
 })
 export class EventsModule {}

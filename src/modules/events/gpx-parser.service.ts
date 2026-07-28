@@ -1,7 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { DOMParser } from '@xmldom/xmldom';
 import { gpx } from '@tmcw/togeojson';
 import { LineString, Feature } from 'geojson';
+import { RoutePreprocessorService } from './route-preprocessor.service';
 
 export interface ParsedGpxResult {
   geoJson: Feature<LineString>;
@@ -21,6 +22,10 @@ export interface ParsedGpxResult {
 
 @Injectable()
 export class GpxParserService {
+  private readonly logger = new Logger(GpxParserService.name);
+
+  constructor(private readonly routePreprocessor: RoutePreprocessorService) {}
+
   parseGpx(gpxString: string): ParsedGpxResult {
     try {
       const parser = new DOMParser();
@@ -55,10 +60,19 @@ export class GpxParserService {
         };
       }
 
-      const coordinates = routeFeature.geometry.coordinates;
-      if (!coordinates || coordinates.length < 2) {
+      const rawCoordinates = routeFeature.geometry.coordinates;
+      if (!rawCoordinates || rawCoordinates.length < 2) {
         throw new BadRequestException('GPX route does not contain enough coordinates');
       }
+
+      // ── Apply Normalization + Densification Pipeline ───────────
+      const { coordinates: processedTriples } = this.routePreprocessor.preprocessRoute(
+        rawCoordinates,
+        { targetSpacing: 15, adaptiveDensification: true },
+      );
+
+      // Update geometry coordinates with cleaned + densified triples [lng, lat, ele]
+      routeFeature.geometry.coordinates = processedTriples;
 
       let totalDistance = 0;
       let totalElevation = 0;
@@ -67,39 +81,35 @@ export class GpxParserService {
 
       const altitudeProfile: any[] = [];
 
-      // Add the starting point to altitude profile
-      if (coordinates.length > 0) {
+      if (processedTriples.length > 0) {
         altitudeProfile.push({
           distance: 0,
-          elevation: coordinates[0].length > 2 ? coordinates[0][2] : 0,
-          lat: coordinates[0][1],
-          lng: coordinates[0][0],
+          elevation: processedTriples[0][2],
+          lat: processedTriples[0][1],
+          lng: processedTriples[0][0],
           cumGain: 0,
           cumLoss: 0,
         });
       }
 
-      for (let i = 1; i < coordinates.length; i++) {
-        const prev = coordinates[i - 1];
-        const curr = coordinates[i];
+      for (let i = 1; i < processedTriples.length; i++) {
+        const prev = processedTriples[i - 1];
+        const curr = processedTriples[i];
 
-        // coordinates[0] = lng, coordinates[1] = lat, coordinates[2] = elevation (optional)
         const d = this.calculateHaversineDistance(prev[1], prev[0], curr[1], curr[0]);
         totalDistance += d;
 
-        if (prev.length > 2 && curr.length > 2) {
-          const eleDiff = curr[2] - prev[2];
-          if (eleDiff > 0) {
-            totalElevation += eleDiff; // Cumulative elevation gain
-            cumGain += eleDiff;
-          } else {
-            cumLoss += Math.abs(eleDiff);
-          }
+        const eleDiff = curr[2] - prev[2];
+        if (eleDiff > 0) {
+          totalElevation += eleDiff;
+          cumGain += eleDiff;
+        } else {
+          cumLoss += Math.abs(eleDiff);
         }
 
         altitudeProfile.push({
           distance: Math.round(totalDistance),
-          elevation: curr.length > 2 ? curr[2] : 0,
+          elevation: curr[2],
           lat: curr[1],
           lng: curr[0],
           cumGain: Math.round(cumGain),
@@ -107,8 +117,8 @@ export class GpxParserService {
         });
       }
 
-      const startPoint = { lat: coordinates[0][1], lng: coordinates[0][0] };
-      const lastCoord = coordinates[coordinates.length - 1];
+      const startPoint = { lat: processedTriples[0][1], lng: processedTriples[0][0] };
+      const lastCoord = processedTriples[processedTriples.length - 1];
       const finishPoint = { lat: lastCoord[1], lng: lastCoord[0] };
 
       return {

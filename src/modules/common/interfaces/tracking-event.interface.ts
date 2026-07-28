@@ -111,8 +111,18 @@ export interface IntelligenceResult {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Phase 1 — Pre-Processed Route (cached in Redis + in-memory)
+// Phase 2 — Pre-Processed Route (cached in Redis + in-memory)
 // ═══════════════════════════════════════════════════════════════════
+
+/** Elevation profile point (stored in PostgreSQL as JSONB). */
+export interface AltitudeProfilePoint {
+  distance: number;
+  elevation: number;
+  lat: number;
+  lng: number;
+  cumGain: number;
+  cumLoss: number;
+}
 
 /** GPX route pre-processed for O(1) progress lookup. */
 export interface ProcessedRoute {
@@ -125,14 +135,11 @@ export interface ProcessedRoute {
   /** Number of line segments (coordinates.length - 1). */
   segmentCount: number;
   /** Optional elevation profile array from OSRM / DEM. */
-  altitudeProfile?: Array<{
-    distance: number;
-    elevation: number;
-    lat: number;
-    lng: number;
-    cumGain: number;
-    cumLoss: number;
-  }>;
+  altitudeProfile?: AltitudeProfilePoint[];
+  /** Per-segment compass bearing in degrees (0–360). Used for heading-based snap disambiguation. */
+  bearings?: number[];
+  /** Whether the route has been densified (normalized + interpolated points added). */
+  isDensified?: boolean;
 }
 
 // ─── SOS Event (fast-path — bypasses the queue) ──────────────────

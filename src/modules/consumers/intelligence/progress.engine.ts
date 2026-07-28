@@ -51,27 +51,35 @@ export class ProgressEngine {
     const prevProgress = prevState.progress ? parseFloat(prevState.progress) : 0;
 
     // ── Graduated Snap Search ────────────────────────────────────
-    // Phase 1: try ±5 window (normal case)
-    let snapResult = this.findBestSnap(route, lat, lng, lastSegmentIdx, 5, 15);
+    // Phase 1: try ±15 window (normal case)
+    let snapResult = this.findBestSnap(route, lat, lng, lastSegmentIdx, 15, 15);
 
-    // Phase 2: if snap distance > 100m, expand to ±20 (GPS drift recovery)
+    // Phase 2: if snap distance > 100m, expand to ±50 (GPS drift / jump recovery)
     if (snapResult.bestDist > 100) {
       const consecutiveFails = (this.snapFailures.get(failKey) || 0) + 1;
       this.snapFailures.set(failKey, consecutiveFails);
 
       if (consecutiveFails >= 3) {
-        // After 3 consecutive failures in ±5, try ±20
-        snapResult = this.findBestSnap(route, lat, lng, lastSegmentIdx, 20, 25);
+        // After 3 consecutive failures in ±15, try ±50 window
+        snapResult = this.findBestSnap(route, lat, lng, lastSegmentIdx, 50, 50);
 
+        // Phase 3: if still > 100m, query Flatbush R-tree for global K-nearest segments (teleport / rejoin recovery)
         if (snapResult.bestDist > 100) {
-          // Still can't snap — fallback to last valid position
+          const rtreeResult = this.findBestSnapRTree(route, lat, lng);
+          if (rtreeResult && rtreeResult.bestDist < snapResult.bestDist) {
+            snapResult = rtreeResult;
+            this.logger.log(
+              `[Progress] 🔄 R-tree fallback snap succeeded for participant ${participantId}: dist=${Math.round(snapResult.bestDist)}m, seg=${snapResult.bestSegIdx}`,
+            );
+          }
+        }
+
+        if (snapResult.bestDist > 200) {
+          // Still can't snap (off-route > 200m) — fallback to last valid position
           this.logger.warn(
             `[Progress] ⚠️ Snap failed for participant ${participantId} (${Math.round(snapResult.bestDist)}m). Using last valid.`,
           );
 
-          // Prevent snapDistance collapse: do NOT fullScan the entire route,
-          // because in a looping track it will find a false-positive close segment.
-          // Just use the local window's bestDist.
           const fallbackSnapDist = snapResult.bestDist;
 
           const result = {
@@ -94,9 +102,6 @@ export class ProgressEngine {
           };
           return result;
         }
-      } else {
-        // Haven't hit 3 consecutive failures yet — still use the best we found
-        // (the ±5 result may be good enough even at > 100m for now)
       }
     } else {
       // Good snap — reset failure counter
@@ -264,5 +269,148 @@ export class ProgressEngine {
     const closestLat = aLat + closestY / M_PER_DEG_LAT;
 
     return { dist, fraction, closestLat, closestLng };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  PHASE 3: FLATBUSH R-TREE SPATIAL INDEX FALLBACK
+  // ═══════════════════════════════════════════════════════════════
+
+  /** Spatial Index Cache for route segments (routeKey → any) */
+  private spatialIndexCache: Map<string, any> = new Map();
+
+  private async findBestSnapRTreeAsync(
+    route: ProcessedRoute,
+    lat: number,
+    lng: number,
+  ): Promise<{
+    bestDist: number;
+    bestSegIdx: number;
+    bestFraction: number;
+    bestSnappedLat: number;
+    bestSnappedLng: number;
+  } | null> {
+    if (!route || route.segmentCount === 0) return null;
+
+    const cacheKey = `${route.totalDistance}:${route.segmentCount}`;
+    let index = this.spatialIndexCache.get(cacheKey);
+
+    if (!index) {
+      try {
+        const { default: Flatbush } = await (eval('import("flatbush")') as Promise<any>);
+        index = new Flatbush(route.segmentCount);
+        for (let i = 0; i < route.segmentCount; i++) {
+          const [aLng, aLat] = route.coordinates[i];
+          const [bLng, bLat] = route.coordinates[i + 1];
+          index.add(
+            Math.min(aLng, bLng),
+            Math.min(aLat, aLat > bLat ? bLat : aLat),
+            Math.max(aLng, bLng),
+            Math.max(aLat, bLat),
+          );
+        }
+        index.finish();
+        this.spatialIndexCache.set(cacheKey, index);
+      } catch (err) {
+        // Fallback: grid scan
+        return this.findBestSnap(route, lat, lng, 0, route.segmentCount, 0);
+      }
+    }
+
+    const candidateIndices = index.neighbors(lng, lat, 10);
+
+    let bestDist = Infinity;
+    let bestSegIdx = 0;
+    let bestFraction = 0;
+    let bestSnappedLat = lat;
+    let bestSnappedLng = lng;
+
+    for (const segIdx of candidateIndices) {
+      const [aLng, aLat] = route.coordinates[segIdx];
+      const [bLng, bLat] = route.coordinates[segIdx + 1];
+
+      const { dist, fraction, closestLat, closestLng } = this.projectPointOnSegment(
+        lat,
+        lng,
+        aLat,
+        aLng,
+        bLat,
+        bLng,
+      );
+
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestSegIdx = segIdx;
+        bestFraction = fraction;
+        bestSnappedLat = closestLat;
+        bestSnappedLng = closestLng;
+      }
+    }
+
+    return {
+      bestDist,
+      bestSegIdx,
+      bestFraction,
+      bestSnappedLat,
+      bestSnappedLng,
+    };
+  }
+
+  private findBestSnapRTree(
+    route: ProcessedRoute,
+    lat: number,
+    lng: number,
+  ): {
+    bestDist: number;
+    bestSegIdx: number;
+    bestFraction: number;
+    bestSnappedLat: number;
+    bestSnappedLng: number;
+  } | null {
+    // Synchronous fallback wrapper using grid search if dynamic import is pending
+    const cacheKey = `${route.totalDistance}:${route.segmentCount}`;
+    const index = this.spatialIndexCache.get(cacheKey);
+
+    if (index) {
+      const candidateIndices = index.neighbors(lng, lat, 10);
+      let bestDist = Infinity;
+      let bestSegIdx = 0;
+      let bestFraction = 0;
+      let bestSnappedLat = lat;
+      let bestSnappedLng = lng;
+
+      for (const segIdx of candidateIndices) {
+        const [aLng, aLat] = route.coordinates[segIdx];
+        const [bLng, bLat] = route.coordinates[segIdx + 1];
+
+        const { dist, fraction, closestLat, closestLng } = this.projectPointOnSegment(
+          lat,
+          lng,
+          aLat,
+          aLng,
+          bLat,
+          bLng,
+        );
+
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestSegIdx = segIdx;
+          bestFraction = fraction;
+          bestSnappedLat = closestLat;
+          bestSnappedLng = closestLng;
+        }
+      }
+
+      return {
+        bestDist,
+        bestSegIdx,
+        bestFraction,
+        bestSnappedLat,
+        bestSnappedLng,
+      };
+    }
+
+    // Trigger background cache building for future updates
+    void this.findBestSnapRTreeAsync(route, lat, lng);
+    return null;
   }
 }
