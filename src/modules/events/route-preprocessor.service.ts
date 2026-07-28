@@ -34,10 +34,7 @@ export class RoutePreprocessorService {
    * @param options      Preprocessing configuration
    * @returns Cleaned, densified coordinates with elevation
    */
-  preprocessRoute(
-    coordinates: number[][],
-    options: PreprocessOptions = {},
-  ): PreprocessResult {
+  preprocessRoute(coordinates: number[][], options: PreprocessOptions = {}): PreprocessResult {
     const opts: Required<PreprocessOptions> = {
       targetSpacing: options.targetSpacing ?? 15,
       adaptiveDensification: options.adaptiveDensification ?? true,
@@ -78,9 +75,7 @@ export class RoutePreprocessorService {
     coords = this.removeDuplicates(coords, opts.duplicateThresholdMeters);
     stats.removedDuplicates = beforeDuplicates - coords.length;
     if (stats.removedDuplicates > 0) {
-      this.logger.log(
-        `[Preprocess] Stage 2: Removed ${stats.removedDuplicates} duplicate points`,
-      );
+      this.logger.log(`[Preprocess] Stage 2: Removed ${stats.removedDuplicates} duplicate points`);
     }
 
     // Stage 3: Geometry spike filter
@@ -102,7 +97,11 @@ export class RoutePreprocessorService {
     }
 
     // Stage 5: Elevation validation
-    stats.elevationsCorrected = this.validateElevations(coords, opts.minElevation, opts.maxElevation);
+    stats.elevationsCorrected = this.validateElevations(
+      coords,
+      opts.minElevation,
+      opts.maxElevation,
+    );
     if (stats.elevationsCorrected > 0) {
       this.logger.log(
         `[Preprocess] Stage 5: Corrected ${stats.elevationsCorrected} invalid elevations`,
@@ -136,9 +135,7 @@ export class RoutePreprocessorService {
     }
 
     stats.outputPoints = coords.length;
-    this.logger.log(
-      `[Preprocess] Complete: ${stats.inputPoints} → ${stats.outputPoints} points`,
-    );
+    this.logger.log(`[Preprocess] Complete: ${stats.inputPoints} → ${stats.outputPoints} points`);
 
     return {
       coordinates: coords,
@@ -151,7 +148,7 @@ export class RoutePreprocessorService {
   // ═══════════════════════════════════════════════════════════════
 
   private filterInvalidCoordinates(coords: Triple[]): Triple[] {
-    return coords.filter(([lng, lat, ele]) => {
+    return coords.filter(([lng, lat]) => {
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
       if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
       // Don't filter by elevation here — Stage 5 handles it
@@ -189,7 +186,7 @@ export class RoutePreprocessorService {
   ): Triple[] {
     if (coords.length < 3) return coords;
 
-    const keep: boolean[] = new Array(coords.length).fill(true);
+    const keep: boolean[] = Array.from({ length: coords.length }, () => true);
 
     for (let i = 1; i < coords.length - 1; i++) {
       const prev = coords[i - 1];
@@ -197,11 +194,7 @@ export class RoutePreprocessorService {
       const next = coords[i + 1];
 
       // Compute the angle at curr between segments prev→curr and curr→next
-      const angle = this.angleBetweenSegments(
-        prev[1], prev[0],
-        curr[1], curr[0],
-        next[1], next[0],
-      );
+      const angle = this.angleBetweenSegments(prev[1], prev[0], curr[1], curr[0], next[1], next[0]);
 
       const segLen = this.euclideanDistMeters(prev[1], prev[0], curr[1], curr[0]);
 
@@ -274,11 +267,7 @@ export class RoutePreprocessorService {
     minEle: number,
     maxEle: number,
   ): number | null {
-    for (
-      let i = startIdx + direction;
-      i >= 0 && i < coords.length;
-      i += direction
-    ) {
+    for (let i = startIdx + direction; i >= 0 && i < coords.length; i += direction) {
       const ele = coords[i][2];
       if (Number.isFinite(ele) && ele >= minEle && ele <= maxEle) {
         return ele;
@@ -307,8 +296,18 @@ export class RoutePreprocessorService {
       const currCoord = coords[i];
       const nextCoord = coords[i + 1];
 
-      const distPrev = this.euclideanDistMeters(prevCoord[1], prevCoord[0], currCoord[1], currCoord[0]);
-      const distNext = this.euclideanDistMeters(currCoord[1], currCoord[0], nextCoord[1], nextCoord[0]);
+      const distPrev = this.euclideanDistMeters(
+        prevCoord[1],
+        prevCoord[0],
+        currCoord[1],
+        currCoord[0],
+      );
+      const distNext = this.euclideanDistMeters(
+        currCoord[1],
+        currCoord[0],
+        nextCoord[1],
+        nextCoord[0],
+      );
 
       if (distPrev < 0.1 || distNext < 0.1) continue;
 
@@ -420,9 +419,12 @@ export class RoutePreprocessorService {
       if (i < coords.length - 1) {
         const next = coords[i + 1];
         const angle = this.angleBetweenSegments(
-          prev[1], prev[0],
-          curr[1], curr[0],
-          next[1], next[0],
+          prev[1],
+          prev[0],
+          curr[1],
+          curr[0],
+          next[1],
+          next[0],
         );
 
         // Higher angle = tighter turn = denser spacing
@@ -462,12 +464,7 @@ export class RoutePreprocessorService {
    * Fast Euclidean distance approximation in meters.
    * Accurate to ~0.1% at typical cycling latitudes (±10°).
    */
-  private euclideanDistMeters(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number,
-  ): number {
+  private euclideanDistMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const M_PER_DEG_LAT = 111_320;
     const cosLat = Math.cos((((lat1 + lat2) / 2) * Math.PI) / 180);
     const M_PER_DEG_LNG = 111_320 * cosLat;

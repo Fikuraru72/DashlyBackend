@@ -296,7 +296,8 @@ export class ProgressEngine {
 
     if (!index) {
       try {
-        const { default: Flatbush } = await (eval('import("flatbush")') as Promise<any>);
+        const loadFlatbush = new Function('return import("flatbush")');
+        const { default: Flatbush } = await (loadFlatbush() as Promise<any>);
         index = new Flatbush(route.segmentCount);
         for (let i = 0; i < route.segmentCount; i++) {
           const [aLng, aLat] = route.coordinates[i];
@@ -310,7 +311,7 @@ export class ProgressEngine {
         }
         index.finish();
         this.spatialIndexCache.set(cacheKey, index);
-      } catch (err) {
+      } catch (_err) {
         // Fallback: grid scan
         return this.findBestSnap(route, lat, lng, 0, route.segmentCount, 0);
       }
