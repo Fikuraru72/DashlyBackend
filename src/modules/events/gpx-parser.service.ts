@@ -71,8 +71,18 @@ export class GpxParserService {
         { targetSpacing: 15, adaptiveDensification: true },
       );
 
-      // Update geometry coordinates with cleaned + densified triples [lng, lat, ele]
-      routeFeature.geometry.coordinates = processedTriples;
+      // Update geometry coordinates with cleaned + densified triples [lng, lat, ele] and mark source as 'gpx'
+      routeFeature = {
+        ...routeFeature,
+        properties: {
+          ...routeFeature.properties,
+          source: 'gpx',
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: processedTriples,
+        },
+      };
 
       let totalDistance = 0;
       let totalElevation = 0;

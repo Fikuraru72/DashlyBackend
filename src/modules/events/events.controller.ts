@@ -47,18 +47,10 @@ export class EventsController {
     }
     const gpxString = file.buffer.toString('utf-8');
     const parsed = this.gpxParser.parseGpx(gpxString);
-    const category = file.originalname?.toLowerCase().includes('cycling') ? 'CYCLING' : 'RUNNING';
-    const normalized = await this.osrmService.normalizeRoute(category, parsed.geoJson);
 
     return {
       success: true,
-      data: normalized
-        ? {
-            ...parsed,
-            geoJson: normalized.geoJson,
-            totalDistanceMeters: normalized.totalDistanceMeters,
-          }
-        : parsed,
+      data: parsed,
     };
   }
 
