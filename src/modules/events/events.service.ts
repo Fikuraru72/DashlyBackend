@@ -42,7 +42,16 @@ export class EventsService {
    * Used by dashboard on initial load / refresh to restore markers instantly.
    */
   async getLivePositions(eventId: number) {
-    const positions = await this.redisService.getAllParticipantPositions(eventId);
+    const [positions, rankings] = await Promise.all([
+      this.redisService.getAllParticipantPositions(eventId),
+      this.redisService.getAllRankings(eventId),
+    ]);
+
+    // Build ranking lookup: participantId → { rank (1-based), score }
+    const rankMap = new Map<number, { rank: number; score: number }>();
+    rankings.forEach((r, idx) => {
+      rankMap.set(r.participantId, { rank: idx + 1, score: r.score });
+    });
 
     // Get real names and state from DB in a single query
     const participantRows = await this.db
@@ -61,13 +70,17 @@ export class EventsService {
 
     return positions.map((p) => {
       const info = infoMap.get(p.participantId);
+      const rankInfo = rankMap.get(p.participantId);
       return {
         ...p,
-        userId: info?.userId || p.userId, // Fix: Overwrite userId from DB if Redis had the wrong one
+        userId: info?.userId || p.userId,
         isOffline: p.isOffline === 'true' || p.isOffline === true,
         name: info?.name || `Runner ${info?.userId || p.userId}`,
         state: info?.state || 'TRACKING',
         bibNumber: info?.bibNumber || '-',
+        rank: rankInfo?.rank ?? null,
+        score: rankInfo?.score ?? null,
+        progressPercent: p.routeDistance != null && p.routeDistance !== '' ? null : null,
       };
     });
   }
