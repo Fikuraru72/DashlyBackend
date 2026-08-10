@@ -151,10 +151,30 @@ export class UsersService {
         password: hashedPassword,
         roleId: createUserDto.roleId,
         phone: createUserDto.phone,
-        healthInfo: createUserDto.healthInfo,
       })
       .returning();
-    return user;
+
+    if (createUserDto.healthInfo) {
+      const hInfo = createUserDto.healthInfo as Record<string, any>;
+      await this.db.insert(schema.userHealthProfiles).values({
+        userId: user.id,
+        bloodType: hInfo.bloodType,
+        weight: hInfo.weight ? parseFloat(hInfo.weight) : null,
+        height: hInfo.height ? parseFloat(hInfo.height) : null,
+        emergencyContact:
+          hInfo.emergencyContact ||
+          (hInfo.emergencyContactName
+            ? `${hInfo.emergencyContactName} - ${hInfo.emergencyContactPhone || ''}`
+            : null),
+        medicalHistory:
+          hInfo.medicalHistory ||
+          (Array.isArray(hInfo.medicalConditions)
+            ? hInfo.medicalConditions.join(', ')
+            : hInfo.medicalConditions),
+      });
+    }
+
+    return this.findOne(user.id);
   }
 
   async remove(userId: number) {

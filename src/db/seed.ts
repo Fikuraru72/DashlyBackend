@@ -85,6 +85,21 @@ async function seed() {
           .returning();
         user = insertedUser;
         console.log(`Created user: ${userData.email}`);
+
+        // Seed userHealthProfiles for participants
+        if (userData.roleName === 'PARTICIPANT') {
+          await db
+            .insert(schema.userHealthProfiles)
+            .values({
+              userId: user.id,
+              bloodType: 'O+',
+              weight: 68.0,
+              height: 172.0,
+              emergencyContact: '08123456789 (Kerabat)',
+              medicalHistory: 'Tidak ada riwayat penyakit berat',
+            })
+            .onConflictDoNothing();
+        }
       }
       userMap[userData.email] = user.id;
     }
