@@ -63,7 +63,10 @@ export const userHealthProfiles = pgTable('user_health_profiles', {
   bloodType: varchar('blood_type', { length: 10 }),
   weight: doublePrecision('weight'),
   height: doublePrecision('height'),
-  emergencyContact: varchar('emergency_contact', { length: 50 }),
+  emergencyName: varchar('emergency_name', { length: 100 }),
+  emergencyPhone: varchar('emergency_phone', { length: 50 }),
+  emergencyRelation: varchar('emergency_relation', { length: 50 }),
+  emergencyContact: varchar('emergency_contact', { length: 255 }),
   medicalHistory: text('medical_history'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

@@ -24,6 +24,18 @@ export class HealthInfoDto {
 
   @IsOptional()
   @IsString()
+  emergencyName?: string;
+
+  @IsOptional()
+  @IsString()
+  emergencyPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  emergencyRelation?: string;
+
+  @IsOptional()
+  @IsString()
   emergencyContact?: string;
 
   @IsOptional()

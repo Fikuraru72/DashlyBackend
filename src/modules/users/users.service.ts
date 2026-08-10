@@ -31,6 +31,30 @@ export class UsersService {
         .from(schema.userHealthProfiles)
         .where(eq(schema.userHealthProfiles.userId, userId));
 
+      const emName =
+        dto.healthInfo.emergencyName !== undefined
+          ? dto.healthInfo.emergencyName
+          : (existingProfile?.emergencyName ?? null);
+      const emPhone =
+        dto.healthInfo.emergencyPhone !== undefined
+          ? dto.healthInfo.emergencyPhone
+          : (existingProfile?.emergencyPhone ?? null);
+      const emRel =
+        dto.healthInfo.emergencyRelation !== undefined
+          ? dto.healthInfo.emergencyRelation
+          : (existingProfile?.emergencyRelation ?? null);
+
+      let formattedContact = dto.healthInfo.emergencyContact;
+      if (emName || emPhone || emRel) {
+        const parts: string[] = [];
+        if (emName) parts.push(emName);
+        if (emRel) parts.push(`(${emRel})`);
+        if (emPhone) parts.push(`- ${emPhone}`);
+        if (parts.length > 0) {
+          formattedContact = parts.join(' ');
+        }
+      }
+
       if (existingProfile) {
         await this.db
           .update(schema.userHealthProfiles)
@@ -38,7 +62,10 @@ export class UsersService {
             bloodType: dto.healthInfo.bloodType ?? existingProfile.bloodType,
             weight: dto.healthInfo.weight ?? existingProfile.weight,
             height: dto.healthInfo.height ?? existingProfile.height,
-            emergencyContact: dto.healthInfo.emergencyContact ?? existingProfile.emergencyContact,
+            emergencyName: emName,
+            emergencyPhone: emPhone,
+            emergencyRelation: emRel,
+            emergencyContact: formattedContact ?? existingProfile.emergencyContact,
             medicalHistory: dto.healthInfo.medicalHistory ?? existingProfile.medicalHistory,
             updatedAt: new Date(),
           })
@@ -49,7 +76,10 @@ export class UsersService {
           bloodType: dto.healthInfo.bloodType,
           weight: dto.healthInfo.weight,
           height: dto.healthInfo.height,
-          emergencyContact: dto.healthInfo.emergencyContact,
+          emergencyName: emName,
+          emergencyPhone: emPhone,
+          emergencyRelation: emRel,
+          emergencyContact: formattedContact,
           medicalHistory: dto.healthInfo.medicalHistory,
         });
       }
@@ -76,6 +106,9 @@ export class UsersService {
           bloodType: user.healthProfile.bloodType,
           weight: user.healthProfile.weight,
           height: user.healthProfile.height,
+          emergencyName: user.healthProfile.emergencyName,
+          emergencyPhone: user.healthProfile.emergencyPhone,
+          emergencyRelation: user.healthProfile.emergencyRelation,
           emergencyContact: user.healthProfile.emergencyContact,
           medicalHistory: user.healthProfile.medicalHistory,
         }
@@ -130,6 +163,9 @@ export class UsersService {
             bloodType: user.healthProfile.bloodType,
             weight: user.healthProfile.weight,
             height: user.healthProfile.height,
+            emergencyName: user.healthProfile.emergencyName,
+            emergencyPhone: user.healthProfile.emergencyPhone,
+            emergencyRelation: user.healthProfile.emergencyRelation,
             emergencyContact: user.healthProfile.emergencyContact,
             medicalHistory: user.healthProfile.medicalHistory,
           }
@@ -161,16 +197,37 @@ export class UsersService {
 
     if (createUserDto.healthInfo) {
       const hInfo = createUserDto.healthInfo as Record<string, any>;
+      const emName = hInfo.emergencyName || hInfo.emergencyContactName || null;
+      const emPhone =
+        hInfo.emergencyPhone || hInfo.emergencyContactPhone || hInfo.emergency_phone || null;
+      const emRel = hInfo.emergencyRelation || null;
+
+      let formattedContact = hInfo.emergencyContact;
+      if (emName || emPhone || emRel) {
+        const parts: string[] = [];
+        if (emName) parts.push(emName);
+        if (emRel) parts.push(`(${emRel})`);
+        if (emPhone) parts.push(`- ${emPhone}`);
+        if (parts.length > 0) formattedContact = parts.join(' ');
+      }
+
       await this.db.insert(schema.userHealthProfiles).values({
         userId: user.id,
-        bloodType: hInfo.bloodType,
-        weight: hInfo.weight ? parseFloat(hInfo.weight) : null,
-        height: hInfo.height ? parseFloat(hInfo.height) : null,
-        emergencyContact:
-          hInfo.emergencyContact ||
-          (hInfo.emergencyContactName
-            ? `${hInfo.emergencyContactName} - ${hInfo.emergencyContactPhone || ''}`
-            : null),
+        bloodType: hInfo.bloodType || hInfo.blood_type,
+        weight: hInfo.weight
+          ? parseFloat(hInfo.weight)
+          : hInfo.weight_kg
+            ? parseFloat(hInfo.weight_kg)
+            : null,
+        height: hInfo.height
+          ? parseFloat(hInfo.height)
+          : hInfo.height_cm
+            ? parseFloat(hInfo.height_cm)
+            : null,
+        emergencyName: emName,
+        emergencyPhone: emPhone,
+        emergencyRelation: emRel,
+        emergencyContact: formattedContact,
         medicalHistory:
           hInfo.medicalHistory ||
           (Array.isArray(hInfo.medicalConditions)

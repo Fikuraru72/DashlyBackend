@@ -95,7 +95,10 @@ async function seed() {
               bloodType: 'O+',
               weight: 68.0,
               height: 172.0,
-              emergencyContact: '08123456789 (Kerabat)',
+              emergencyName: 'Budi Santoso',
+              emergencyPhone: '08123456789',
+              emergencyRelation: 'Orang Tua',
+              emergencyContact: 'Budi Santoso (Orang Tua) - 08123456789',
               medicalHistory: 'Tidak ada riwayat penyakit berat',
             })
             .onConflictDoNothing();

@@ -72,12 +72,28 @@ export class AuthService {
       .returning();
 
     if (dto.healthInfo) {
+      const emName = dto.healthInfo.emergencyName ?? null;
+      const emPhone = dto.healthInfo.emergencyPhone ?? dto.healthInfo.emergencyContact ?? null;
+      const emRel = dto.healthInfo.emergencyRelation ?? null;
+
+      let formattedContact = dto.healthInfo.emergencyContact;
+      if (emName || emPhone || emRel) {
+        const parts: string[] = [];
+        if (emName) parts.push(emName);
+        if (emRel) parts.push(`(${emRel})`);
+        if (emPhone) parts.push(`- ${emPhone}`);
+        if (parts.length > 0) formattedContact = parts.join(' ');
+      }
+
       await this.db.insert(schema.userHealthProfiles).values({
         userId: newUser.id,
         bloodType: dto.healthInfo.bloodType,
         weight: dto.healthInfo.weight,
         height: dto.healthInfo.height,
-        emergencyContact: dto.healthInfo.emergencyContact,
+        emergencyName: emName,
+        emergencyPhone: emPhone,
+        emergencyRelation: emRel,
+        emergencyContact: formattedContact,
         medicalHistory: dto.healthInfo.medicalHistory,
       });
     }
