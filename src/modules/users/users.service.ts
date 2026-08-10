@@ -17,10 +17,7 @@ export class UsersService {
     if (dto.roleId !== undefined) updatePayload.roleId = dto.roleId;
 
     if (Object.keys(updatePayload).length > 0) {
-      await this.db
-        .update(schema.users)
-        .set(updatePayload)
-        .where(eq(schema.users.id, userId));
+      await this.db.update(schema.users).set(updatePayload).where(eq(schema.users.id, userId));
     }
 
     if (dto.healthInfo) {

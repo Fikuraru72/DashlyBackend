@@ -563,15 +563,16 @@ export class EventsService {
       .where(eq(schema.eventParticipants.eventId, eventId));
 
     const formatted = results.map((r) => {
-      const mergedHealth = r.healthProfile?.bloodType || r.healthProfile?.emergencyContact
-        ? {
-            bloodType: r.healthProfile.bloodType,
-            weight: r.healthProfile.weight,
-            height: r.healthProfile.height,
-            emergencyContact: r.healthProfile.emergencyContact,
-            medicalHistory: r.healthProfile.medicalHistory,
-          }
-        : r.healthInfo;
+      const mergedHealth =
+        r.healthProfile?.bloodType || r.healthProfile?.emergencyContact
+          ? {
+              bloodType: r.healthProfile.bloodType,
+              weight: r.healthProfile.weight,
+              height: r.healthProfile.height,
+              emergencyContact: r.healthProfile.emergencyContact,
+              medicalHistory: r.healthProfile.medicalHistory,
+            }
+          : r.healthInfo;
 
       return {
         ...r,
