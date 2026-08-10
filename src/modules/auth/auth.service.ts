@@ -67,10 +67,20 @@ export class AuthService {
         password: hashedPassword,
         name: dto.name,
         phone: dto.phone,
-        healthInfo: dto.healthInfo ?? null,
         roleId,
       })
       .returning();
+
+    if (dto.healthInfo) {
+      await this.db.insert(schema.userHealthProfiles).values({
+        userId: newUser.id,
+        bloodType: dto.healthInfo.bloodType,
+        weight: dto.healthInfo.weight,
+        height: dto.healthInfo.height,
+        emergencyContact: dto.healthInfo.emergencyContact,
+        medicalHistory: dto.healthInfo.medicalHistory,
+      });
+    }
 
     return this.generateToken(newUser, 'PARTICIPANT');
   }

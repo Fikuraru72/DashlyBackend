@@ -547,14 +547,40 @@ export class EventsService {
         email: schema.users.email,
         phone: schema.users.phone,
         healthInfo: schema.users.healthInfo,
+        healthProfile: {
+          bloodType: schema.userHealthProfiles.bloodType,
+          weight: schema.userHealthProfiles.weight,
+          height: schema.userHealthProfiles.height,
+          emergencyContact: schema.userHealthProfiles.emergencyContact,
+          medicalHistory: schema.userHealthProfiles.medicalHistory,
+        },
         joinedAt: schema.eventParticipants.joinedAt,
         bibNumber: schema.eventParticipants.bibNumber,
       })
       .from(schema.eventParticipants)
       .innerJoin(schema.users, eq(schema.eventParticipants.userId, schema.users.id))
+      .leftJoin(schema.userHealthProfiles, eq(schema.users.id, schema.userHealthProfiles.userId))
       .where(eq(schema.eventParticipants.eventId, eventId));
 
-    return { success: true, data: results };
+    const formatted = results.map((r) => {
+      const mergedHealth = r.healthProfile?.bloodType || r.healthProfile?.emergencyContact
+        ? {
+            bloodType: r.healthProfile.bloodType,
+            weight: r.healthProfile.weight,
+            height: r.healthProfile.height,
+            emergencyContact: r.healthProfile.emergencyContact,
+            medicalHistory: r.healthProfile.medicalHistory,
+          }
+        : r.healthInfo;
+
+      return {
+        ...r,
+        healthInfo: mergedHealth,
+        healthProfile: r.healthProfile,
+      };
+    });
+
+    return { success: true, data: formatted };
   }
 
   private async reserveParticipant(

@@ -12,21 +12,48 @@ export class UsersService {
   constructor(@Inject(DB_CONNECTION) private readonly db: NodePgDatabase<typeof schema>) {}
 
   async updateProfile(userId: number, dto: UpdateUserDto) {
-    const [updatedUser] = await this.db
-      .update(schema.users)
-      .set({
-        phone: dto.phone,
-        healthInfo: dto.healthInfo,
-        roleId: dto.roleId,
-      })
-      .where(eq(schema.users.id, userId))
-      .returning();
+    const updatePayload: Record<string, any> = {};
+    if (dto.phone !== undefined) updatePayload.phone = dto.phone;
+    if (dto.roleId !== undefined) updatePayload.roleId = dto.roleId;
 
-    if (!updatedUser) {
-      throw new NotFoundException('User not found');
+    if (Object.keys(updatePayload).length > 0) {
+      await this.db
+        .update(schema.users)
+        .set(updatePayload)
+        .where(eq(schema.users.id, userId));
     }
 
-    return updatedUser;
+    if (dto.healthInfo) {
+      const [existingProfile] = await this.db
+        .select()
+        .from(schema.userHealthProfiles)
+        .where(eq(schema.userHealthProfiles.userId, userId));
+
+      if (existingProfile) {
+        await this.db
+          .update(schema.userHealthProfiles)
+          .set({
+            bloodType: dto.healthInfo.bloodType ?? existingProfile.bloodType,
+            weight: dto.healthInfo.weight ?? existingProfile.weight,
+            height: dto.healthInfo.height ?? existingProfile.height,
+            emergencyContact: dto.healthInfo.emergencyContact ?? existingProfile.emergencyContact,
+            medicalHistory: dto.healthInfo.medicalHistory ?? existingProfile.medicalHistory,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.userHealthProfiles.userId, userId));
+      } else {
+        await this.db.insert(schema.userHealthProfiles).values({
+          userId,
+          bloodType: dto.healthInfo.bloodType,
+          weight: dto.healthInfo.weight,
+          height: dto.healthInfo.height,
+          emergencyContact: dto.healthInfo.emergencyContact,
+          medicalHistory: dto.healthInfo.medicalHistory,
+        });
+      }
+    }
+
+    return this.findOne(userId);
   }
 
   async findOne(userId: number) {
@@ -34,6 +61,7 @@ export class UsersService {
       where: eq(schema.users.id, userId),
       with: {
         role: true,
+        healthProfile: true,
       },
     });
 
@@ -41,7 +69,21 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return user;
+    const healthData = user.healthProfile
+      ? {
+          bloodType: user.healthProfile.bloodType,
+          weight: user.healthProfile.weight,
+          height: user.healthProfile.height,
+          emergencyContact: user.healthProfile.emergencyContact,
+          medicalHistory: user.healthProfile.medicalHistory,
+        }
+      : user.healthInfo;
+
+    return {
+      ...user,
+      healthInfo: healthData,
+      healthProfile: user.healthProfile,
+    };
   }
 
   async getUserStats(userId: number) {

@@ -49,9 +49,23 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 255 }).notNull(),
   avatar: text('avatar'),
   phone: varchar('phone', { length: 20 }),
-  healthInfo: jsonb('health_info'),
+  healthInfo: jsonb('health_info'), // Retained for backward compatibility fallback
   roleId: integer('role_id').references(() => roles.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const userHealthProfiles = pgTable('user_health_profiles', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id')
+    .references(() => users.id, { onDelete: 'cascade' })
+    .notNull()
+    .unique(),
+  bloodType: varchar('blood_type', { length: 10 }),
+  weight: doublePrecision('weight'),
+  height: doublePrecision('height'),
+  emergencyContact: varchar('emergency_contact', { length: 50 }),
+  medicalHistory: text('medical_history'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 export const events = pgTable('events', {
@@ -193,10 +207,21 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.roleId],
     references: [roles.id],
   }),
+  healthProfile: one(userHealthProfiles, {
+    fields: [users.id],
+    references: [userHealthProfiles.userId],
+  }),
   locationLogs: many(locationLogs),
   tokens: many(tokens),
   rankings: many(rankings),
   anomalies: many(anomalies),
+}));
+
+export const userHealthProfilesRelations = relations(userHealthProfiles, ({ one }) => ({
+  user: one(users, {
+    fields: [userHealthProfiles.userId],
+    references: [users.id],
+  }),
 }));
 
 export const rolesRelations = relations(roles, ({ many }) => ({
