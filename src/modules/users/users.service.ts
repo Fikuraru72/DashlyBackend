@@ -13,8 +13,13 @@ export class UsersService {
 
   async updateProfile(userId: number, dto: UpdateUserDto) {
     const updatePayload: Record<string, any> = {};
+    if (dto.name !== undefined) updatePayload.name = dto.name;
     if (dto.phone !== undefined) updatePayload.phone = dto.phone;
     if (dto.roleId !== undefined) updatePayload.roleId = dto.roleId;
+    if (dto.avatar !== undefined) updatePayload.avatar = dto.avatar;
+    if (dto.password !== undefined && dto.password.trim() !== '') {
+      updatePayload.password = await bcrypt.hash(dto.password, 10);
+    }
 
     if (Object.keys(updatePayload).length > 0) {
       await this.db.update(schema.users).set(updatePayload).where(eq(schema.users.id, userId));
