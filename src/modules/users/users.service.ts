@@ -112,10 +112,29 @@ export class UsersService {
   }
 
   async findAll() {
-    return this.db.query.users.findMany({
+    const allUsers = await this.db.query.users.findMany({
       with: {
         role: true,
+        healthProfile: true,
       },
+    });
+
+    return allUsers.map((user) => {
+      const healthData = user.healthProfile
+        ? {
+            bloodType: user.healthProfile.bloodType,
+            weight: user.healthProfile.weight,
+            height: user.healthProfile.height,
+            emergencyContact: user.healthProfile.emergencyContact,
+            medicalHistory: user.healthProfile.medicalHistory,
+          }
+        : user.healthInfo;
+
+      return {
+        ...user,
+        healthInfo: healthData,
+        healthProfile: user.healthProfile,
+      };
     });
   }
 
