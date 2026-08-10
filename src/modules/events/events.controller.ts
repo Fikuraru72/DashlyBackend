@@ -144,6 +144,13 @@ export class EventsController {
     return this.eventsService.verifyBib(user, +id, dto.bibNumber);
   }
 
+  @Post(':id/finish-participant')
+  @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
+  async finishParticipant(@Param('id') id: string, @CurrentUser() user: any) {
+    const userId = user.id || user.sub;
+    return this.eventsService.finishParticipant(+id, userId);
+  }
+
   @Post('join-via-token')
   @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
   async joinEventViaToken(@Body() dto: JoinEventDto, @CurrentUser() user: any) {

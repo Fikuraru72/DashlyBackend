@@ -946,6 +946,33 @@ export class EventsService {
     };
   }
 
+  async finishParticipant(eventId: number, userId: number) {
+    const participant = await this.db.query.eventParticipants.findFirst({
+      where: and(
+        eq(schema.eventParticipants.eventId, eventId),
+        eq(schema.eventParticipants.userId, userId),
+      ),
+    });
+
+    if (!participant) {
+      throw new NotFoundException('Participant not found in this event');
+    }
+
+    const [updated] = await this.db
+      .update(schema.eventParticipants)
+      .set({ participantState: 'FINISHED' as any })
+      .where(eq(schema.eventParticipants.id, participant.id))
+      .returning();
+
+    await this.redisService.setParticipantStateOnly(eventId, participant.id, 'FINISHED');
+
+    return {
+      success: true,
+      data: updated,
+      message: 'Participant ride marked as FINISHED',
+    };
+  }
+
   async deleteAnomaly(eventId: number, anomalyId: number) {
     const [deleted] = await this.db
       .delete(schema.anomalies)
