@@ -14,6 +14,7 @@ import { eq, and, isNull, lt, sql, asc } from 'drizzle-orm';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { UpdateEventStatusDto } from './dto/update-event-status.dto';
+import { FinishParticipantDto } from './dto/finish-participant.dto';
 import { getMonitoringWindow } from './monitoring.helper';
 import { RedisService } from '../redis/redis.service';
 import { OsrmService } from './osrm.service';
@@ -383,6 +384,12 @@ export class EventsService {
         monitoringEndOffset: schema.events.monitoringEndOffset,
         participantState: schema.eventParticipants.participantState,
         bibNumber: schema.eventParticipants.bibNumber,
+        durationSeconds: schema.eventParticipants.durationSeconds,
+        totalDistanceMeters: schema.eventParticipants.totalDistanceMeters,
+        avgSpeedKmh: schema.eventParticipants.avgSpeedKmh,
+        maxSpeedKmh: schema.eventParticipants.maxSpeedKmh,
+        elevationGainMeters: schema.eventParticipants.elevationGainMeters,
+        finishedAt: schema.eventParticipants.finishedAt,
       })
       .from(schema.events)
       .innerJoin(schema.eventParticipants, eq(schema.events.id, schema.eventParticipants.eventId))
@@ -947,7 +954,7 @@ export class EventsService {
     };
   }
 
-  async finishParticipant(eventId: number, userId: number) {
+  async finishParticipant(eventId: number, userId: number, dto?: FinishParticipantDto) {
     const participant = await this.db.query.eventParticipants.findFirst({
       where: and(
         eq(schema.eventParticipants.eventId, eventId),
@@ -959,9 +966,20 @@ export class EventsService {
       throw new NotFoundException('Participant not found in this event');
     }
 
+    const updatePayload: Record<string, any> = {
+      participantState: 'FINISHED',
+      finishedAt: new Date(),
+    };
+
+    if (dto?.durationSeconds != null) updatePayload.durationSeconds = dto.durationSeconds;
+    if (dto?.totalDistanceMeters != null) updatePayload.totalDistanceMeters = dto.totalDistanceMeters;
+    if (dto?.avgSpeedKmh != null) updatePayload.avgSpeedKmh = dto.avgSpeedKmh;
+    if (dto?.maxSpeedKmh != null) updatePayload.maxSpeedKmh = dto.maxSpeedKmh;
+    if (dto?.elevationGainMeters != null) updatePayload.elevationGainMeters = dto.elevationGainMeters;
+
     const [updated] = await this.db
       .update(schema.eventParticipants)
-      .set({ participantState: 'FINISHED' as any })
+      .set(updatePayload)
       .where(eq(schema.eventParticipants.id, participant.id))
       .returning();
 

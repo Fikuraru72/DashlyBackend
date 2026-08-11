@@ -146,9 +146,13 @@ export class EventsController {
 
   @Post(':id/finish-participant')
   @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
-  async finishParticipant(@Param('id') id: string, @CurrentUser() user: any) {
+  async finishParticipant(
+    @Param('id') id: string,
+    @Body() dto: FinishParticipantDto,
+    @CurrentUser() user: any,
+  ) {
     const userId = user.id || user.sub;
-    return this.eventsService.finishParticipant(+id, userId);
+    return this.eventsService.finishParticipant(+id, userId, dto);
   }
 
   @Post('join-via-token')

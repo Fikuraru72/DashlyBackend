@@ -163,6 +163,12 @@ export const eventParticipants = pgTable(
     participantState: participantStateEnum('participant_state').default('REGISTERED').notNull(),
     distanceCovered: integer('distance_covered').default(0).notNull(),
     estimatedFinishTime: timestamp('estimated_finish_time'),
+    durationSeconds: integer('duration_seconds'),
+    totalDistanceMeters: integer('total_distance_meters'),
+    avgSpeedKmh: doublePrecision('avg_speed_kmh'),
+    maxSpeedKmh: doublePrecision('max_speed_kmh'),
+    elevationGainMeters: integer('elevation_gain_meters'),
+    finishedAt: timestamp('finished_at'),
     joinedAt: timestamp('joined_at').defaultNow().notNull(),
   },
   (t) => ({
