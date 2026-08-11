@@ -6,14 +6,17 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../../../db/schema';
 
 /**
- * RankingEngine — Real-time hybrid scoring + ranking (HARDENED).
+ * RankingEngine — Pure Progress-Based Ranking (HARDENED).
  *
- * Hardening additions over Phase 1:
- *   - Speed smoothing via rolling 5-sample average
- *   - Speed clamping (Running: 8 m/s, Cycling: 20 m/s)
+ * Ranking is determined 100% by physical route progress:
+ *   Score = (progressPercentage × 10) + (checkpointsCompleted × 100)
+ *
+ * Speed is still tracked for telemetry display but does NOT affect rank.
+ *
+ * Hardening:
  *   - Anomaly exclusion (returns previous score unchanged)
- *   - Delta stabilization: max +5% per tick (or +15% when progress > 90%)
- *   - Backward movement penalty (-2% score)
+ *   - Delta stabilization: max +50 per tick (or +150 when progress > 90%)
+ *   - Backward movement penalty (-20 score)
  *
  * Uses Redis SORTED SET for O(log n) ranking updates and lookups.
  * Periodically flushes the full sorted set to PostgreSQL `rankings` table.
@@ -23,15 +26,12 @@ export class RankingEngine implements OnModuleInit {
   private readonly logger = new Logger(RankingEngine.name);
   private readonly flushIntervalMs = 30_000;
 
-  // Speed clamping thresholds (hardened)
-  private readonly MAX_SPEED_RUNNING = 8; // m/s
-  private readonly MAX_SPEED_CYCLING = 20; // m/s
   private readonly TOTAL_CHECKPOINTS = 3;
 
-  // Score stabilization
-  private readonly MAX_DELTA_NORMAL = 5; // max +5% per tick
-  private readonly MAX_DELTA_FINISH = 15; // max +15% when near finish (>90%)
-  private readonly BACKWARD_PENALTY = 2; // -2% penalty for backward movement
+  // Score stabilization (scaled to new score range 0–1300)
+  private readonly MAX_DELTA_NORMAL = 50; // max +50 per tick
+  private readonly MAX_DELTA_FINISH = 150; // max +150 when near finish (>90%)
+  private readonly BACKWARD_PENALTY = 20; // -20 penalty for backward movement
 
   constructor(
     private readonly redisService: RedisService,
@@ -39,11 +39,12 @@ export class RankingEngine implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.logger.log('Ranking engine started (distributed flush lock enabled)');
+    this.logger.log('Ranking engine started — Pure Progress Mode (distributed flush lock enabled)');
   }
 
   /**
-   * Compute the hybrid score with anti-cheat protections.
+   * Compute score based purely on route progress + checkpoints.
+   * Speed is NOT factored into the ranking score.
    *
    * @param isAnomaly   — if true, skip scoring entirely (return previous)
    * @param backwardMovement — if true, apply ranking penalty
@@ -72,35 +73,23 @@ export class RankingEngine implements OnModuleInit {
       };
     }
 
-    // ── 1. Speed smoothing: push to buffer, compute rolling avg ─
+    // ── 1. Speed buffer (for telemetry display only, NOT for ranking) ─
     await this.redisService.pushSpeedBuffer(participantId, rawSpeed);
-    const speedBuffer = await this.redisService.getSpeedBuffer(participantId);
-    let smoothedSpeed = rawSpeed;
-    if (speedBuffer.length > 0) {
-      smoothedSpeed = speedBuffer.reduce((a, b) => a + b, 0) / speedBuffer.length;
-    }
 
-    // ── 2. Speed clamping ──────────────────────────────────────
-    const maxSpeed = eventCategory === 'CYCLING' ? this.MAX_SPEED_CYCLING : this.MAX_SPEED_RUNNING;
-    const clampedSpeed = Math.min(smoothedSpeed, maxSpeed);
+    // ── 2. Pure Progress Score ──────────────────────────────────
+    // Score = (progress% × 10) + (checkpoints × 100)
+    // Range: 0 to 1300 (100×10 + 3×100)
+    // This guarantees participant physically further on route always ranks higher.
+    let newScore = progressPercentage * 10.0 + checkpointsCompleted * 100.0;
 
-    // ── 3. Normalize speed (0–100 scale) ───────────────────────
-    const normalizedSpeed = (clampedSpeed / maxSpeed) * 100;
-
-    // ── 4. Normalize checkpoint completion (0–100 scale) ───────
-    const checkpointCompletion = (checkpointsCompleted / this.TOTAL_CHECKPOINTS) * 100;
-
-    // ── 5. Hybrid score ────────────────────────────────────────
-    let newScore = progressPercentage * 0.7 + normalizedSpeed * 0.2 + checkpointCompletion * 0.1;
-
-    // ── 6. Backward movement penalty ───────────────────────────
+    // ── 3. Backward movement penalty ───────────────────────────
     if (backwardMovement) {
       newScore = Math.max(0, newScore - this.BACKWARD_PENALTY);
     }
 
     newScore = Math.round(newScore * 100) / 100;
 
-    // ── 7. Delta stabilization (anti-cheat) ────────────────────
+    // ── 4. Delta stabilization (anti-cheat) ────────────────────
     const prevScore = (await this.redisService.getRankingScore(eventId, participantId)) ?? 0;
 
     const maxDelta = progressPercentage > 90 ? this.MAX_DELTA_FINISH : this.MAX_DELTA_NORMAL;
@@ -110,11 +99,11 @@ export class RankingEngine implements OnModuleInit {
     }
     // Allow decrease without limit (backward movement, corrections)
 
-    // ── 8. Update Redis sorted set ─────────────────────────────
+    // ── 5. Update Redis sorted set ─────────────────────────────
     await this.redisService.updateRankingScore(eventId, participantId, newScore);
     void this.flushRankingsIfDue(eventId);
 
-    // ── 9. Read rank ───────────────────────────────────────────
+    // ── 6. Read rank ───────────────────────────────────────────
     const [zeroBasedRank, totalParticipants] = await Promise.all([
       this.redisService.getRank(eventId, participantId),
       this.redisService.getTotalRanked(eventId),
