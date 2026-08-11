@@ -972,10 +972,12 @@ export class EventsService {
     };
 
     if (dto?.durationSeconds != null) updatePayload.durationSeconds = dto.durationSeconds;
-    if (dto?.totalDistanceMeters != null) updatePayload.totalDistanceMeters = dto.totalDistanceMeters;
+    if (dto?.totalDistanceMeters != null)
+      updatePayload.totalDistanceMeters = dto.totalDistanceMeters;
     if (dto?.avgSpeedKmh != null) updatePayload.avgSpeedKmh = dto.avgSpeedKmh;
     if (dto?.maxSpeedKmh != null) updatePayload.maxSpeedKmh = dto.maxSpeedKmh;
-    if (dto?.elevationGainMeters != null) updatePayload.elevationGainMeters = dto.elevationGainMeters;
+    if (dto?.elevationGainMeters != null)
+      updatePayload.elevationGainMeters = dto.elevationGainMeters;
 
     const [updated] = await this.db
       .update(schema.eventParticipants)
