@@ -23,6 +23,7 @@ import { UpdateEventStatusDto } from './dto/update-event-status.dto';
 import { UpdateParticipantStateDto } from './dto/update-participant-state.dto';
 import { JoinEventDto } from './dto/join-event.dto';
 import { VerifyBibDto } from './dto/verify-bib.dto';
+import { FinishParticipantDto } from './dto/finish-participant.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
