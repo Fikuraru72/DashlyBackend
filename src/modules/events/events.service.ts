@@ -375,6 +375,7 @@ export class EventsService {
         currentCount: schema.events.currentCount,
         maxParticipants: schema.events.maxParticipants,
         dateEvent: schema.events.dateEvent,
+        bannerImage: schema.events.bannerImage,
         routeGeojson: schema.events.routeGeojson,
         startTime: schema.events.startTime,
         endTime: schema.events.endTime,
