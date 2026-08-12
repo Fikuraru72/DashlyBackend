@@ -10,7 +10,7 @@ import {
 import { DB_CONNECTION } from '../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../db/schema';
-import { eq, and, isNull, lt, sql, asc } from 'drizzle-orm';
+import { eq, and, isNull, lt, sql, asc, ne } from 'drizzle-orm';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { UpdateEventStatusDto } from './dto/update-event-status.dto';
@@ -1435,6 +1435,8 @@ export class EventsService {
       }
 
       try {
+        let isNewUser = false;
+
         await this.db.transaction(async (tx) => {
           // 1. Check or create User
           let user = await tx.query.users.findFirst({
@@ -1449,57 +1451,75 @@ export class EventsService {
               .insert(schema.users)
               .values({
                 email,
-                name,
+                name: name || 'Participant',
                 phone: phone || null,
                 password: hashedPassword,
               })
               .returning();
             userId = newUser.id;
-            createdUsersCount++;
+            isNewUser = true;
           } else {
             userId = user.id;
-            existingUsersCount++;
-            if (phone || name) {
+            isNewUser = false;
+            if (phone || (name && name !== 'Participant')) {
               await tx
                 .update(schema.users)
                 .set({
                   ...(phone && !user.phone ? { phone } : {}),
-                  ...(name && user.name === 'User' ? { name } : {}),
+                  ...(name && name !== 'Participant' && user.name === 'User' ? { name } : {}),
                 })
                 .where(eq(schema.users.id, userId));
             }
           }
 
-          // 2. Upsert Health Profile
+          // 2. Safe Health Profile Upsert
           if (bloodType || emergencyPhone || medicalHistory || emergencyRelation) {
-            const existingHealth = await tx.query.userHealthProfiles.findFirst({
-              where: eq(schema.userHealthProfiles.userId, userId),
-            });
-
-            if (existingHealth) {
-              await tx
-                .update(schema.userHealthProfiles)
-                .set({
-                  ...(bloodType ? { bloodType } : {}),
-                  ...(medicalHistory ? { medicalHistory } : {}),
-                  ...(emergencyPhone ? { emergencyPhone, emergencyContact: emergencyPhone } : {}),
-                  ...(emergencyRelation ? { emergencyRelation } : {}),
-                  updatedAt: new Date(),
-                })
-                .where(eq(schema.userHealthProfiles.userId, userId));
-            } else {
-              await tx.insert(schema.userHealthProfiles).values({
-                userId,
-                bloodType: bloodType || null,
-                medicalHistory: medicalHistory || null,
-                emergencyPhone: emergencyPhone || null,
-                emergencyContact: emergencyPhone || null,
-                emergencyRelation: emergencyRelation || null,
+            try {
+              const existingHealth = await tx.query.userHealthProfiles.findFirst({
+                where: eq(schema.userHealthProfiles.userId, userId),
               });
+
+              if (existingHealth) {
+                await tx
+                  .update(schema.userHealthProfiles)
+                  .set({
+                    ...(bloodType ? { bloodType } : {}),
+                    ...(medicalHistory ? { medicalHistory } : {}),
+                    ...(emergencyPhone ? { emergencyPhone, emergencyContact: emergencyPhone } : {}),
+                    ...(emergencyRelation ? { emergencyRelation } : {}),
+                    updatedAt: new Date(),
+                  })
+                  .where(eq(schema.userHealthProfiles.userId, userId));
+              } else {
+                await tx.insert(schema.userHealthProfiles).values({
+                  userId,
+                  bloodType: bloodType || null,
+                  medicalHistory: medicalHistory || null,
+                  emergencyPhone: emergencyPhone || null,
+                  emergencyContact: emergencyPhone || null,
+                  emergencyRelation: emergencyRelation || null,
+                });
+              }
+            } catch {
+              // Ignore health profile error to allow participant registration to succeed
             }
           }
 
-          // 3. Register or Update Event Participant
+          // 3. Ensure unique BIB Number per Event
+          let finalBib = bibNum || String(i + 1).padStart(3, '0');
+          const existingBibOwner = await tx.query.eventParticipants.findFirst({
+            where: and(
+              eq(schema.eventParticipants.eventId, eventId),
+              eq(schema.eventParticipants.bibNumber, finalBib),
+              ne(schema.eventParticipants.userId, userId),
+            ),
+          });
+
+          if (existingBibOwner) {
+            finalBib = `${finalBib}-${i + 1}`;
+          }
+
+          // 4. Register or Update Event Participant
           const existingParticipant = await tx.query.eventParticipants.findFirst({
             where: and(
               eq(schema.eventParticipants.eventId, eventId),
@@ -1511,8 +1531,8 @@ export class EventsService {
             await tx.insert(schema.eventParticipants).values({
               eventId,
               userId,
-              participantNumber: bibNum,
-              bibNumber: bibNum,
+              participantNumber: finalBib,
+              bibNumber: finalBib,
               participantState: 'CONFIRMED',
             });
 
@@ -1524,15 +1544,21 @@ export class EventsService {
             await tx
               .update(schema.eventParticipants)
               .set({
-                bibNumber: bibNum,
-                participantNumber: bibNum,
+                bibNumber: finalBib,
+                participantNumber: finalBib,
                 participantState: 'CONFIRMED',
               })
               .where(eq(schema.eventParticipants.id, existingParticipant.id));
           }
-
-          successCount++;
         });
+
+        // Increment stats ONLY on transaction success
+        successCount++;
+        if (isNewUser) {
+          createdUsersCount++;
+        } else {
+          existingUsersCount++;
+        }
       } catch (err: any) {
         this.logger.error(`Error importing row ${i + 1} (${email}): ${err.message}`, err.stack);
         errors.push(`Row ${i + 1} (${email}): ${err.message}`);
