@@ -1427,12 +1427,20 @@ export class EventsService {
         }
       }
 
-      let email = rawEmail ? rawEmail.toLowerCase().trim() : '';
-
+      // Sanitize & truncate fields to match database schema column bounds
+      let email = (rawEmail ? rawEmail.toLowerCase().trim() : '').slice(0, 255);
       if (!email) {
         const cleanBib = (bibNum || String(i + 1)).replace(/[^a-z0-9]/gi, '');
         email = `participant${cleanBib || i + 1}@dashlytrack.cloud`;
       }
+
+      const safeName = (name || 'Participant').trim().slice(0, 255);
+      const safePhone = phone ? phone.trim().slice(0, 20) : null;
+      const safeBloodType = bloodType ? bloodType.trim().slice(0, 10) : null;
+      const safeEmergencyPhone = emergencyPhone ? emergencyPhone.trim().slice(0, 50) : null;
+      const safeEmergencyRelation = emergencyRelation
+        ? emergencyRelation.trim().slice(0, 50)
+        : null;
 
       try {
         let isNewUser = false;
@@ -1445,14 +1453,14 @@ export class EventsService {
 
           let userId: number;
           if (!user) {
-            const rawPassword = phone ? phone.trim() : 'EcoRace2026!';
+            const rawPassword = safePhone || 'EcoRace2026!';
             const hashedPassword = await bcrypt.hash(rawPassword, 10);
             const [newUser] = await tx
               .insert(schema.users)
               .values({
                 email,
-                name: name || 'Participant',
-                phone: phone || null,
+                name: safeName,
+                phone: safePhone,
                 password: hashedPassword,
               })
               .returning();
@@ -1461,19 +1469,21 @@ export class EventsService {
           } else {
             userId = user.id;
             isNewUser = false;
-            if (phone || (name && name !== 'Participant')) {
+            if (safePhone || (safeName && safeName !== 'Participant')) {
               await tx
                 .update(schema.users)
                 .set({
-                  ...(phone && !user.phone ? { phone } : {}),
-                  ...(name && name !== 'Participant' && user.name === 'User' ? { name } : {}),
+                  ...(safePhone && !user.phone ? { phone: safePhone } : {}),
+                  ...(safeName && safeName !== 'Participant' && user.name === 'User'
+                    ? { name: safeName }
+                    : {}),
                 })
                 .where(eq(schema.users.id, userId));
             }
           }
 
           // 2. Safe Health Profile Upsert
-          if (bloodType || emergencyPhone || medicalHistory || emergencyRelation) {
+          if (safeBloodType || safeEmergencyPhone || medicalHistory || safeEmergencyRelation) {
             try {
               const existingHealth = await tx.query.userHealthProfiles.findFirst({
                 where: eq(schema.userHealthProfiles.userId, userId),
@@ -1483,21 +1493,23 @@ export class EventsService {
                 await tx
                   .update(schema.userHealthProfiles)
                   .set({
-                    ...(bloodType ? { bloodType } : {}),
+                    ...(safeBloodType ? { bloodType: safeBloodType } : {}),
                     ...(medicalHistory ? { medicalHistory } : {}),
-                    ...(emergencyPhone ? { emergencyPhone, emergencyContact: emergencyPhone } : {}),
-                    ...(emergencyRelation ? { emergencyRelation } : {}),
+                    ...(safeEmergencyPhone
+                      ? { emergencyPhone: safeEmergencyPhone, emergencyContact: safeEmergencyPhone }
+                      : {}),
+                    ...(safeEmergencyRelation ? { emergencyRelation: safeEmergencyRelation } : {}),
                     updatedAt: new Date(),
                   })
                   .where(eq(schema.userHealthProfiles.userId, userId));
               } else {
                 await tx.insert(schema.userHealthProfiles).values({
                   userId,
-                  bloodType: bloodType || null,
+                  bloodType: safeBloodType,
                   medicalHistory: medicalHistory || null,
-                  emergencyPhone: emergencyPhone || null,
-                  emergencyContact: emergencyPhone || null,
-                  emergencyRelation: emergencyRelation || null,
+                  emergencyPhone: safeEmergencyPhone,
+                  emergencyContact: safeEmergencyPhone,
+                  emergencyRelation: safeEmergencyRelation,
                 });
               }
             } catch {
@@ -1506,7 +1518,7 @@ export class EventsService {
           }
 
           // 3. Ensure unique BIB Number per Event
-          let finalBib = bibNum || String(i + 1).padStart(3, '0');
+          let finalBib = (bibNum || String(i + 1).padStart(3, '0')).trim().slice(0, 50);
           const existingBibOwner = await tx.query.eventParticipants.findFirst({
             where: and(
               eq(schema.eventParticipants.eventId, eventId),
@@ -1516,7 +1528,7 @@ export class EventsService {
           });
 
           if (existingBibOwner) {
-            finalBib = `${finalBib}-${i + 1}`;
+            finalBib = `${finalBib}-${i + 1}`.slice(0, 50);
           }
 
           // 4. Register or Update Event Participant
