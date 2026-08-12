@@ -141,10 +141,7 @@ export class EventsController {
 
   @Post(':id/participants/batch-add')
   @Roles('SUPER_ADMIN', 'STAFF')
-  async addParticipantsBatch(
-    @Param('id') eventId: string,
-    @Body('userIds') userIds: number[],
-  ) {
+  async addParticipantsBatch(@Param('id') eventId: string, @Body('userIds') userIds: number[]) {
     return this.eventsService.addParticipantsBatch(+eventId, userIds);
   }
 
