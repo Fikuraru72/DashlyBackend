@@ -382,10 +382,17 @@ export class EventsService {
         endTime: schema.events.endTime,
         monitoringStartOffset: schema.events.monitoringStartOffset,
         monitoringEndOffset: schema.events.monitoringEndOffset,
+        // Route info fields (from events table)
+        totalDistanceMeters: schema.events.totalDistanceMeters,
+        totalElevationMeters: schema.events.totalElevationMeters,
+        altitudeProfile: schema.events.altitudeProfile,
+        latitude: schema.events.latitude,
+        longitude: schema.events.longitude,
+        // Participant-specific fields
         participantState: schema.eventParticipants.participantState,
         bibNumber: schema.eventParticipants.bibNumber,
         durationSeconds: schema.eventParticipants.durationSeconds,
-        totalDistanceMeters: schema.eventParticipants.totalDistanceMeters,
+        participantDistanceMeters: schema.eventParticipants.totalDistanceMeters,
         avgSpeedKmh: schema.eventParticipants.avgSpeedKmh,
         maxSpeedKmh: schema.eventParticipants.maxSpeedKmh,
         elevationGainMeters: schema.eventParticipants.elevationGainMeters,
