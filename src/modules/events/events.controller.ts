@@ -220,10 +220,15 @@ export class EventsController {
   async importParticipantsCsv(
     @Param('id') id: string,
     @UploadedFile() file: { buffer: Buffer; originalname?: string },
+    @Body() body: any,
   ) {
-    if (!file || !file.buffer) {
-      throw new BadRequestException('No CSV file uploaded');
+    if (file && file.buffer) {
+      return this.eventsService.importParticipantsFromCsv(+id, file.buffer);
+    } else if (body && (Array.isArray(body.participants) || Array.isArray(body.rows))) {
+      const rows = body.participants || body.rows;
+      return this.eventsService.importParticipantsFromJson(+id, rows);
+    } else {
+      throw new BadRequestException('No CSV file or participants array provided');
     }
-    return this.eventsService.importParticipantsFromCsv(+id, file.buffer);
   }
 }

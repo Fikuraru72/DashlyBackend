@@ -1281,6 +1281,19 @@ export class EventsService {
     return records;
   }
 
+  async importParticipantsFromJson(eventId: number, participants: Record<string, any>[]) {
+    const event = await this.db.query.events.findFirst({
+      where: eq(schema.events.id, eventId),
+    });
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+    if (!participants || participants.length === 0) {
+      throw new BadRequestException('Participants data is empty');
+    }
+    return this.processImportRows(eventId, participants);
+  }
+
   async importParticipantsFromCsv(eventId: number, fileBuffer: Buffer) {
     const event = await this.db.query.events.findFirst({
       where: eq(schema.events.id, eventId),
@@ -1294,6 +1307,10 @@ export class EventsService {
       throw new BadRequestException('CSV file is empty or invalid format');
     }
 
+    return this.processImportRows(eventId, records);
+  }
+
+  private async processImportRows(eventId: number, records: Record<string, any>[]) {
     let successCount = 0;
     let createdUsersCount = 0;
     let existingUsersCount = 0;
@@ -1306,7 +1323,9 @@ export class EventsService {
           const target = k.toLowerCase().replace(/[^a-z0-9]/g, '');
           for (const rawKey of Object.keys(row)) {
             const normalizedKey = rawKey.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (normalizedKey === target) return row[rawKey];
+            if (normalizedKey === target && row[rawKey] !== undefined && row[rawKey] !== null) {
+              return String(row[rawKey]).trim();
+            }
           }
         }
         return '';
@@ -1314,23 +1333,39 @@ export class EventsService {
 
       const rawEmail = getVal('email', 'email address', 'mail');
       const email = rawEmail ? rawEmail.toLowerCase().trim() : '';
-      const name = getVal('full name', 'fullname', 'nama lengkap', 'nama', 'name') || 'Participant';
+      const name =
+        getVal('fullname', 'full name', 'nama lengkap', 'nama', 'name') || 'Participant';
       const phone = getVal('phone', 'nomor hp', 'telepon', 'handphone', 'no hp', 'phone number');
       const bibNum =
-        getVal('participant number', 'bib number', 'bib', 'no bib', 'nomor peserta') ||
-        String(i + 1).padStart(3, '0');
-      const bloodType = getVal('golongan darah', 'blood type', 'goldar');
-      const medicalHistory = getVal('penyakit bawaan', 'medical history', 'riwayat penyakit');
+        getVal(
+          'participantnumber',
+          'participant number',
+          'bib number',
+          'bibnumber',
+          'bib',
+          'no bib',
+          'nomor peserta',
+        ) || String(i + 1).padStart(3, '0');
+      const bloodType = getVal('bloodtype', 'golongan darah', 'blood type', 'goldar');
+      const medicalHistory = getVal(
+        'medicalhistory',
+        'penyakit bawaan',
+        'medical history',
+        'riwayat penyakit',
+      );
       const emergencyPhone = getVal(
+        'emergencyphone',
         'nomor kontak darurat',
         'emergency phone',
         'kontak darurat',
         'emergency contact',
       );
       const emergencyRelation = getVal(
+        'emergencyrelation',
         'hubungan dengan kontak darurat',
         'emergency relation',
         'hubungan kontak darurat',
+        'hubungan',
       );
 
       if (!email) {
