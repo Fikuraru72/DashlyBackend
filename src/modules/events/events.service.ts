@@ -1517,14 +1517,18 @@ export class EventsService {
           } else {
             userId = user.id;
             isNewUser = false;
-            if (safePhone || (safeName && safeName !== 'Participant')) {
+            // Update name/phone for existing users if they have placeholder names
+            const shouldUpdateName =
+              safeName &&
+              safeName !== 'Participant' &&
+              (user.name === 'User' || user.name === 'Participant' || !user.name);
+            const shouldUpdatePhone = safePhone && !user.phone;
+            if (shouldUpdateName || shouldUpdatePhone) {
               await tx
                 .update(schema.users)
                 .set({
-                  ...(safePhone && !user.phone ? { phone: safePhone } : {}),
-                  ...(safeName && safeName !== 'Participant' && user.name === 'User'
-                    ? { name: safeName }
-                    : {}),
+                  ...(shouldUpdatePhone ? { phone: safePhone } : {}),
+                  ...(shouldUpdateName ? { name: safeName } : {}),
                 })
                 .where(eq(schema.users.id, userId));
             }
