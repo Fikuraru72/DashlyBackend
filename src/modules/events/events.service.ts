@@ -1384,44 +1384,56 @@ export class EventsService {
 
       // Pattern-based and Column Index Fallbacks if header matching failed
       const allRowValues = Object.values(row).map((v) => String(v ?? '').trim());
+      const rowString = JSON.stringify(row);
 
-      // 1. Email Fallback: Find any cell matching email regex or column index 3
+      // 1. Email Fallback: Extract exact email substring via regex match
       if (!rawEmail) {
-        const emailCell = allRowValues.find((v) => /[^\s@]+@[^\s@]+\.[^\s@]+/.test(v));
-        if (emailCell) {
-          rawEmail = emailCell;
-        } else if (allRowValues[3] && allRowValues[3].includes('@')) {
-          rawEmail = allRowValues[3];
-        }
-      }
-
-      // 2. Phone Fallback: Find any cell with phone pattern or column index 4
-      if (!phone) {
-        const phoneCell = allRowValues.find((v) =>
-          /^\+?[0-9]{8,15}$/.test(v.replace(/[\s-]/g, '')),
+        const singleEmailCell = allRowValues.find(
+          (v) => !v.includes(',') && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(v),
         );
-        if (phoneCell) {
-          phone = phoneCell;
-        } else if (allRowValues[4]) {
-          phone = allRowValues[4];
+        if (singleEmailCell) {
+          rawEmail = singleEmailCell.trim();
+        } else {
+          const matchedEmail = rowString.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+          if (matchedEmail && matchedEmail[0]) {
+            rawEmail = matchedEmail[0].trim();
+          }
         }
       }
 
-      // 3. Name Fallback: Column index 2 or first text cell that is not email/phone
+      // 2. Phone Fallback: Extract exact phone substring
+      if (!phone) {
+        const singlePhoneCell = allRowValues.find(
+          (v) => !v.includes(',') && /^\+?[0-9]{8,15}$/.test(v.replace(/[\s-]/g, '')),
+        );
+        if (singlePhoneCell) {
+          phone = singlePhoneCell.trim();
+        } else {
+          const matchedPhone = rowString.match(/\+62[0-9]{8,13}|08[0-9]{8,12}/);
+          if (matchedPhone && matchedPhone[0]) {
+            phone = matchedPhone[0].trim();
+          } else if (allRowValues[4] && !allRowValues[4].includes(',')) {
+            phone = allRowValues[4].trim();
+          }
+        }
+      }
+
+      // 3. Name Fallback: Column index 2 or fallback
       if (!name || name === 'Participant') {
         if (
           allRowValues[2] &&
+          !allRowValues[2].includes(',') &&
           !allRowValues[2].includes('@') &&
           !/^\+?[0-9]{8,15}$/.test(allRowValues[2])
         ) {
-          name = allRowValues[2].replace(/^["']|["']$/g, '');
+          name = allRowValues[2].replace(/^["']|["']$/g, '').trim();
         }
       }
 
       // 4. BIB Fallback: Column index 0 or formatted index
       if (!bibNum || bibNum === String(i + 1).padStart(3, '0')) {
-        if (allRowValues[0] && allRowValues[0] !== name) {
-          bibNum = allRowValues[0].replace(/^["']|["']$/g, '');
+        if (allRowValues[0] && !allRowValues[0].includes(',') && allRowValues[0] !== name) {
+          bibNum = allRowValues[0].replace(/^["']|["']$/g, '').trim();
         } else {
           bibNum = String(i + 1).padStart(3, '0');
         }
@@ -1429,7 +1441,7 @@ export class EventsService {
 
       // Sanitize & truncate fields to match database schema column bounds
       let email = (rawEmail ? rawEmail.toLowerCase().trim() : '').slice(0, 255);
-      if (!email) {
+      if (!email || email.includes(',')) {
         const cleanBib = (bibNum || String(i + 1)).replace(/[^a-z0-9]/gi, '');
         email = `participant${cleanBib || i + 1}@dashlytrack.cloud`;
       }
