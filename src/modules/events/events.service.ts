@@ -434,18 +434,20 @@ export class EventsService {
     }
 
     // Auto-sync currentCount with actual number of registered participants
-    const [countResult] = await this.db
+    const countRes = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(schema.eventParticipants)
       .where(eq(schema.eventParticipants.eventId, eventId));
 
-    const actualCount = countResult?.count ?? 0;
-    if (event.currentCount !== actualCount) {
-      await this.db
-        .update(schema.events)
-        .set({ currentCount: actualCount })
-        .where(eq(schema.events.id, eventId));
-      event.currentCount = actualCount;
+    if (Array.isArray(countRes) && countRes.length > 0) {
+      const actualCount = countRes[0]?.count ?? 0;
+      if (event.currentCount !== actualCount) {
+        await this.db
+          .update(schema.events)
+          .set({ currentCount: actualCount })
+          .where(eq(schema.events.id, eventId));
+        event.currentCount = actualCount;
+      }
     }
 
     const monitoringWindow = getMonitoringWindow(event);
