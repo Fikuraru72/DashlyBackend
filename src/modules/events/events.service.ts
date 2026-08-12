@@ -1241,7 +1241,12 @@ export class EventsService {
       return result;
     };
 
-    const headers = parseLine(lines[0]).map((h) => h.replace(/^["']|["']$/g, '').trim().toLowerCase());
+    const headers = parseLine(lines[0]).map((h) =>
+      h
+        .replace(/^["']|["']$/g, '')
+        .trim()
+        .toLowerCase(),
+    );
     const records: Record<string, string>[] = [];
 
     for (let i = 1; i < lines.length; i++) {
@@ -1294,11 +1299,22 @@ export class EventsService {
       const email = rawEmail ? rawEmail.toLowerCase().trim() : '';
       const name = getVal('full name', 'fullname', 'nama lengkap', 'nama', 'name') || 'Participant';
       const phone = getVal('phone', 'nomor hp', 'telepon', 'handphone', 'no hp', 'phone number');
-      const bibNum = getVal('participant number', 'bib number', 'bib', 'no bib', 'nomor peserta') || String(i + 1).padStart(3, '0');
+      const bibNum =
+        getVal('participant number', 'bib number', 'bib', 'no bib', 'nomor peserta') ||
+        String(i + 1).padStart(3, '0');
       const bloodType = getVal('golongan darah', 'blood type', 'goldar');
       const medicalHistory = getVal('penyakit bawaan', 'medical history', 'riwayat penyakit');
-      const emergencyPhone = getVal('nomor kontak darurat', 'emergency phone', 'kontak darurat', 'emergency contact');
-      const emergencyRelation = getVal('hubungan dengan kontak darurat', 'emergency relation', 'hubungan kontak darurat');
+      const emergencyPhone = getVal(
+        'nomor kontak darurat',
+        'emergency phone',
+        'kontak darurat',
+        'emergency contact',
+      );
+      const emergencyRelation = getVal(
+        'hubungan dengan kontak darurat',
+        'emergency relation',
+        'hubungan kontak darurat',
+      );
 
       if (!email) {
         errors.push(`Row ${i + 1}: Email is missing for ${name}`);
