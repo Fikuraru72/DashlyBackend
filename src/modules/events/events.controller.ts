@@ -222,13 +222,31 @@ export class EventsController {
     @UploadedFile() file: { buffer: Buffer; originalname?: string },
     @Body() body: any,
   ) {
-    if (file && file.buffer) {
-      return this.eventsService.importParticipantsFromCsv(+id, file.buffer);
-    } else if (body && (Array.isArray(body.participants) || Array.isArray(body.rows))) {
-      const rows = body.participants || body.rows;
+    let rows = body?.participants || body?.rows;
+    if (typeof rows === 'string') {
+      try {
+        rows = JSON.parse(rows);
+      } catch (e) {
+        // Ignore JSON parse failure, fallback to file buffer
+      }
+    }
+
+    if (Array.isArray(rows) && rows.length > 0) {
       return this.eventsService.importParticipantsFromJson(+id, rows);
+    } else if (file && file.buffer) {
+      return this.eventsService.importParticipantsFromCsv(+id, file.buffer);
     } else {
       throw new BadRequestException('No CSV file or participants array provided');
     }
+  }
+
+  @Post(':id/import-json')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async importParticipantsJson(@Param('id') id: string, @Body() body: any) {
+    const rows = body?.participants || body?.rows || (Array.isArray(body) ? body : []);
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new BadRequestException('No participants array provided in JSON body');
+    }
+    return this.eventsService.importParticipantsFromJson(+id, rows);
   }
 }
