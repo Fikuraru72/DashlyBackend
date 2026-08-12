@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Delete,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -143,6 +144,16 @@ export class EventsController {
   @Roles('SUPER_ADMIN', 'STAFF')
   async addParticipantsBatch(@Param('id') eventId: string, @Body('userIds') userIds: number[]) {
     return this.eventsService.addParticipantsBatch(+eventId, userIds);
+  }
+
+  @Patch(':id/participants/:userId/bib')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async updateParticipantBib(
+    @Param('id') eventId: string,
+    @Param('userId') userId: string,
+    @Body('bibNumber') bibNumber: string,
+  ) {
+    return this.eventsService.updateParticipantBib(+eventId, +userId, bibNumber);
   }
 
   @Post(':id/join')

@@ -1765,4 +1765,62 @@ export class EventsService {
       addedCount,
     };
   }
+
+  async updateParticipantBib(eventId: number, userId: number, bibNumber: string) {
+    const safeBib = String(bibNumber || '').trim();
+    if (!safeBib) {
+      throw new BadRequestException('BIB number cannot be empty');
+    }
+
+    const event = await this.db.query.events.findFirst({
+      where: eq(schema.events.id, eventId),
+    });
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    const existingParticipant = await this.db.query.eventParticipants.findFirst({
+      where: and(
+        eq(schema.eventParticipants.eventId, eventId),
+        eq(schema.eventParticipants.userId, userId),
+      ),
+    });
+
+    if (!existingParticipant) {
+      throw new NotFoundException('Participant not found in this event');
+    }
+
+    const duplicateBib = await this.db.query.eventParticipants.findFirst({
+      where: and(
+        eq(schema.eventParticipants.eventId, eventId),
+        eq(schema.eventParticipants.bibNumber, safeBib),
+        ne(schema.eventParticipants.userId, userId),
+      ),
+    });
+
+    if (duplicateBib) {
+      throw new ConflictException(
+        `BIB number "${safeBib}" is already assigned to another participant in this event`,
+      );
+    }
+
+    await this.db
+      .update(schema.eventParticipants)
+      .set({
+        bibNumber: safeBib,
+        participantNumber: safeBib,
+      })
+      .where(
+        and(
+          eq(schema.eventParticipants.eventId, eventId),
+          eq(schema.eventParticipants.userId, userId),
+        ),
+      );
+
+    return {
+      success: true,
+      message: `BIB number updated to "${safeBib}" successfully.`,
+      bibNumber: safeBib,
+    };
+  }
 }
