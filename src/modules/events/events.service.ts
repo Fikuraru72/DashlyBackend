@@ -1341,7 +1341,16 @@ export class EventsService {
       };
 
       let rawEmail = getVal('email', 'email address', 'mail', 'alamat email', 'e-mail');
-      let name = getVal('fullname', 'fullName', 'full name', 'participant name', 'nama lengkap', 'nama peserta', 'nama', 'name');
+      let name = getVal(
+        'fullname',
+        'fullName',
+        'full name',
+        'participant name',
+        'nama lengkap',
+        'nama peserta',
+        'nama',
+        'name',
+      );
       let phone = getVal(
         'phone',
         'nomor hp',
@@ -1390,7 +1399,9 @@ export class EventsService {
       if (i < 3) {
         console.log(`[CSV-IMPORT DEBUG] Row ${i}: keys=${JSON.stringify(Object.keys(row))}`);
         console.log(`[CSV-IMPORT DEBUG] Row ${i}: values=${JSON.stringify(allRowValues)}`);
-        console.log(`[CSV-IMPORT DEBUG] Row ${i}: name="${name}", email="${rawEmail}", phone="${phone}", bib="${bibNum}"`);
+        console.log(
+          `[CSV-IMPORT DEBUG] Row ${i}: name="${name}", email="${rawEmail}", phone="${phone}", bib="${bibNum}"`,
+        );
       }
 
       // 1. Email Fallback: Extract exact email substring via regex match
