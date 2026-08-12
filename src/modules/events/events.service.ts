@@ -1427,11 +1427,11 @@ export class EventsService {
         }
       }
 
-      const email = rawEmail ? rawEmail.toLowerCase().trim() : '';
+      let email = rawEmail ? rawEmail.toLowerCase().trim() : '';
 
       if (!email) {
-        errors.push(`Row ${i + 1}: Email is missing for ${name || 'Participant'}`);
-        continue;
+        const cleanBib = (bibNum || String(i + 1)).replace(/[^a-z0-9]/gi, '');
+        email = `participant${cleanBib || i + 1}@dashlytrack.cloud`;
       }
 
       try {
