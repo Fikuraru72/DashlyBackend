@@ -1209,14 +1209,29 @@ export class EventsService {
   }
 
   /**
-   * Helper to parse CSV buffer into array of objects handling quoted string fields safely
+   * Helper to parse CSV buffer into array of objects handling quoted string fields safely,
+   * auto-detecting delimiters (comma, semicolon, tab), and stripping UTF-8 BOM.
    */
   private parseCsvBuffer(buffer: Buffer): Record<string, string>[] {
-    const content = buffer.toString('utf-8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    let content = buffer.toString('utf-8');
+    // Remove UTF-8 BOM if present
+    content = content
+      .replace(/^\uFEFF/, '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n');
     const lines = content.split('\n').filter((l) => l.trim().length > 0);
     if (lines.length === 0) return [];
 
-    const parseLine = (line: string): string[] => {
+    // Auto-detect delimiter from header line (comma, semicolon, or tab)
+    const line0 = lines[0];
+    const commaCount = (line0.match(/,/g) || []).length;
+    const semiCount = (line0.match(/;/g) || []).length;
+    const tabCount = (line0.match(/\t/g) || []).length;
+    let delimiter = ',';
+    if (semiCount > commaCount && semiCount >= tabCount) delimiter = ';';
+    else if (tabCount > commaCount && tabCount > semiCount) delimiter = '\t';
+
+    const parseLine = (line: string, delim: string): string[] => {
       const result: string[] = [];
       let current = '';
       let inQuotes = false;
@@ -1230,7 +1245,7 @@ export class EventsService {
           } else {
             inQuotes = !inQuotes;
           }
-        } else if (char === ',' && !inQuotes) {
+        } else if (char === delim && !inQuotes) {
           result.push(current.trim());
           current = '';
         } else {
@@ -1241,16 +1256,17 @@ export class EventsService {
       return result;
     };
 
-    const headers = parseLine(lines[0]).map((h) =>
+    const headers = parseLine(lines[0], delimiter).map((h) =>
       h
         .replace(/^["']|["']$/g, '')
+        .replace(/[\uFEFF\u200B]/g, '')
         .trim()
         .toLowerCase(),
     );
     const records: Record<string, string>[] = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const values = parseLine(lines[i]);
+      const values = parseLine(lines[i], delimiter);
       if (values.length === 0 || (values.length === 1 && !values[0])) continue;
 
       const record: Record<string, string> = {};
@@ -1287,9 +1303,10 @@ export class EventsService {
       const row = records[i];
       const getVal = (...keys: string[]) => {
         for (const k of keys) {
-          const keyLower = k.toLowerCase();
+          const target = k.toLowerCase().replace(/[^a-z0-9]/g, '');
           for (const rawKey of Object.keys(row)) {
-            if (rawKey.toLowerCase() === keyLower) return row[rawKey];
+            const normalizedKey = rawKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (normalizedKey === target) return row[rawKey];
           }
         }
         return '';
