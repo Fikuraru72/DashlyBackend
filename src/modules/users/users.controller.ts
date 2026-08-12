@@ -53,6 +53,13 @@ export class UsersController {
     return this.usersService.updateProfile(+id, dto);
   }
 
+  @Delete('participants/bulk')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions('manage_users')
+  async removeAllParticipants() {
+    return this.usersService.removeAllParticipants();
+  }
+
   @Delete(':id')
   @UseGuards(PermissionsGuard)
   @RequirePermissions('manage_users')

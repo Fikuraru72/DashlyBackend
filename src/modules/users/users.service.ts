@@ -2,7 +2,7 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { DB_CONNECTION } from '../../db/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
@@ -240,15 +240,60 @@ export class UsersService {
   }
 
   async remove(userId: number) {
-    const [user] = await this.db
-      .delete(schema.users)
-      .where(eq(schema.users.id, userId))
-      .returning();
+    const user = await this.db.query.users.findFirst({
+      where: eq(schema.users.id, userId),
+    });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
+    await this.db.transaction(async (tx) => {
+      await tx.delete(schema.eventParticipants).where(eq(schema.eventParticipants.userId, userId));
+      await tx.delete(schema.userHealthProfiles).where(eq(schema.userHealthProfiles.userId, userId));
+      await tx.delete(schema.rankings).where(eq(schema.rankings.userId, userId));
+      await tx.delete(schema.anomalies).where(eq(schema.anomalies.userId, userId));
+      await tx.delete(schema.locationLogs).where(eq(schema.locationLogs.userId, userId));
+      await tx.delete(schema.tokens).where(eq(schema.tokens.userId, userId));
+      await tx.delete(schema.users).where(eq(schema.users.id, userId));
+    });
+
     return user;
+  }
+
+  async removeAllParticipants() {
+    let deletedCount = 0;
+
+    await this.db.transaction(async (tx) => {
+      // Find all participant users (or non-admin/staff users)
+      const participantUsers = await tx.query.users.findMany({
+        with: { role: true },
+      });
+
+      const idsToDelete = participantUsers
+        .filter((u) => !u.role || u.role.name === 'PARTICIPANT')
+        .map((u) => u.id);
+
+      if (idsToDelete.length === 0) return;
+
+      for (const id of idsToDelete) {
+        await tx.delete(schema.eventParticipants).where(eq(schema.eventParticipants.userId, id));
+        await tx.delete(schema.userHealthProfiles).where(eq(schema.userHealthProfiles.userId, id));
+        await tx.delete(schema.rankings).where(eq(schema.rankings.userId, id));
+        await tx.delete(schema.anomalies).where(eq(schema.anomalies.userId, id));
+        await tx.delete(schema.locationLogs).where(eq(schema.locationLogs.userId, id));
+        await tx.delete(schema.tokens).where(eq(schema.tokens.userId, id));
+        await tx.delete(schema.users).where(eq(schema.users.id, id));
+      }
+
+      // Reset currentCount for events if needed
+      await tx.execute(
+        sql`UPDATE events SET current_count = (SELECT COUNT(*) FROM event_participants WHERE event_id = events.id)`,
+      );
+
+      deletedCount = idsToDelete.length;
+    });
+
+    return { success: true, count: deletedCount };
   }
 }
