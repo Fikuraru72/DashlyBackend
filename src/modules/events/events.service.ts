@@ -1341,7 +1341,7 @@ export class EventsService {
       };
 
       let rawEmail = getVal('email', 'email address', 'mail', 'alamat email', 'e-mail');
-      let name = getVal('fullname', 'full name', 'nama lengkap', 'nama', 'name');
+      let name = getVal('fullname', 'fullName', 'full name', 'participant name', 'nama lengkap', 'nama peserta', 'nama', 'name');
       let phone = getVal(
         'phone',
         'nomor hp',
@@ -1386,6 +1386,13 @@ export class EventsService {
       const allRowValues = Object.values(row).map((v) => String(v ?? '').trim());
       const rowString = JSON.stringify(row);
 
+      // DEBUG: Log row structure for first 3 rows to diagnose name mapping issues
+      if (i < 3) {
+        console.log(`[CSV-IMPORT DEBUG] Row ${i}: keys=${JSON.stringify(Object.keys(row))}`);
+        console.log(`[CSV-IMPORT DEBUG] Row ${i}: values=${JSON.stringify(allRowValues)}`);
+        console.log(`[CSV-IMPORT DEBUG] Row ${i}: name="${name}", email="${rawEmail}", phone="${phone}", bib="${bibNum}"`);
+      }
+
       // 1. Email Fallback: Extract exact email substring via regex match
       if (!rawEmail) {
         const singleEmailCell = allRowValues.find(
@@ -1418,15 +1425,33 @@ export class EventsService {
         }
       }
 
-      // 3. Name Fallback: Column index 2 or fallback
+      // 3. Name Fallback: aggressively find a human name from row values
       if (!name || name === 'Participant') {
-        if (
-          allRowValues[2] &&
-          !allRowValues[2].includes(',') &&
-          !allRowValues[2].includes('@') &&
-          !/^\+?[0-9]{8,15}$/.test(allRowValues[2])
-        ) {
-          name = allRowValues[2].replace(/^["']|["']$/g, '').trim();
+        // Try direct camelCase key access (from frontend JSON mapping)
+        if (row['fullName'] && String(row['fullName']).trim()) {
+          name = String(row['fullName']).trim();
+        } else if (row['Full Name'] && String(row['Full Name']).trim()) {
+          name = String(row['Full Name']).trim();
+        } else {
+          // Scan all values for a likely human name (not email, not phone, not number, not BIB-like)
+          for (const val of allRowValues) {
+            const cleaned = val.replace(/^["']|["']$/g, '').trim();
+            if (
+              cleaned.length >= 3 &&
+              cleaned.length <= 100 &&
+              !cleaned.includes('@') &&
+              !cleaned.includes(',') &&
+              !/^\+?[0-9]{6,}$/.test(cleaned.replace(/[\s-]/g, '')) &&
+              !/^[0-9]{1,5}$/.test(cleaned) &&
+              cleaned !== bibNum &&
+              cleaned !== rawEmail &&
+              cleaned !== phone &&
+              /[a-zA-Z]{2,}/.test(cleaned)
+            ) {
+              name = cleaned;
+              break;
+            }
+          }
         }
       }
 
