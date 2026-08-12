@@ -354,7 +354,12 @@ export class EventsService {
 
   async getExploreEvents() {
     const baseWhere = isNull(schema.events.deletedAt);
-    const events = await this.db.query.events.findMany({ where: baseWhere });
+    const events = await this.db.query.events.findMany({
+      where: baseWhere,
+      columns: {
+        routeGeojson: false,
+      },
+    });
 
     const enriched = events.map((event) => ({
       ...event,
@@ -377,7 +382,6 @@ export class EventsService {
         maxParticipants: schema.events.maxParticipants,
         dateEvent: schema.events.dateEvent,
         bannerImage: schema.events.bannerImage,
-        routeGeojson: schema.events.routeGeojson,
         startTime: schema.events.startTime,
         endTime: schema.events.endTime,
         monitoringStartOffset: schema.events.monitoringStartOffset,
