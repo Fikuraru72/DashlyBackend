@@ -1216,7 +1216,7 @@ export class EventsService {
     let content = buffer.toString('utf-8');
     // Remove UTF-8/UTF-16 BOM and NULL bytes if present
     content = content
-      .replace(/\0/g, '')
+      .replaceAll(String.fromCharCode(0), '')
       .replace(/[\uFEFF\u200B]/g, '')
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n');
@@ -1342,7 +1342,15 @@ export class EventsService {
 
       let rawEmail = getVal('email', 'email address', 'mail', 'alamat email', 'e-mail');
       let name = getVal('fullname', 'full name', 'nama lengkap', 'nama', 'name');
-      let phone = getVal('phone', 'nomor hp', 'telepon', 'handphone', 'no hp', 'phone number', 'nohp');
+      let phone = getVal(
+        'phone',
+        'nomor hp',
+        'telepon',
+        'handphone',
+        'no hp',
+        'phone number',
+        'nohp',
+      );
       let bibNum = getVal(
         'participantnumber',
         'participant number',
@@ -1389,7 +1397,9 @@ export class EventsService {
 
       // 2. Phone Fallback: Find any cell with phone pattern or column index 4
       if (!phone) {
-        const phoneCell = allRowValues.find((v) => /^\+?[0-9]{8,15}$/.test(v.replace(/[\s-]/g, '')));
+        const phoneCell = allRowValues.find((v) =>
+          /^\+?[0-9]{8,15}$/.test(v.replace(/[\s-]/g, '')),
+        );
         if (phoneCell) {
           phone = phoneCell;
         } else if (allRowValues[4]) {
@@ -1399,7 +1409,11 @@ export class EventsService {
 
       // 3. Name Fallback: Column index 2 or first text cell that is not email/phone
       if (!name || name === 'Participant') {
-        if (allRowValues[2] && !allRowValues[2].includes('@') && !/^\+?[0-9]{8,15}$/.test(allRowValues[2])) {
+        if (
+          allRowValues[2] &&
+          !allRowValues[2].includes('@') &&
+          !/^\+?[0-9]{8,15}$/.test(allRowValues[2])
+        ) {
           name = allRowValues[2].replace(/^["']|["']$/g, '');
         }
       }
