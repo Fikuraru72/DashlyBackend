@@ -1501,7 +1501,7 @@ export class EventsService {
 
           let userId: number;
           if (!user) {
-            const rawPassword = safePhone || 'EcoRace2026!';
+            const rawPassword = 'erm123';
             const hashedPassword = await bcrypt.hash(rawPassword, 10);
             const [newUser] = await tx
               .insert(schema.users)
