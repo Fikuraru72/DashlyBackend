@@ -53,6 +53,13 @@ export class UsersController {
     return this.usersService.updateProfile(+id, dto);
   }
 
+  @Post('batch-delete')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions('manage_users')
+  async removeBatch(@Body('ids') ids: number[]) {
+    return this.usersService.removeBatch(ids);
+  }
+
   @Delete('participants/bulk')
   @UseGuards(PermissionsGuard)
   @RequirePermissions('manage_users')

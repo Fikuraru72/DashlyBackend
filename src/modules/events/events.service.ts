@@ -1594,12 +1594,29 @@ export class EventsService {
       message: `Successfully imported ${successCount} participants.`,
       stats: {
         totalRows: records.length,
-        successCount,
-        createdUsersCount,
-        existingUsersCount,
+        successCount: successCount,
+        createdUsersCount: createdUsersCount,
+        existingUsersCount: existingUsersCount,
         errorCount: errors.length,
       },
-      errors,
+      errors: errors,
     };
+  }
+
+  async removeParticipantFromEvent(eventId: number, userId: number) {
+    await this.db
+      .delete(schema.eventParticipants)
+      .where(
+        and(
+          eq(schema.eventParticipants.eventId, eventId),
+          eq(schema.eventParticipants.userId, userId),
+        ),
+      );
+
+    await this.db.execute(
+      sql`UPDATE events SET current_count = (SELECT COUNT(*) FROM event_participants WHERE event_id = ${eventId}) WHERE id = ${eventId}`,
+    );
+
+    return { success: true, message: 'Participant removed from event successfully' };
   }
 }

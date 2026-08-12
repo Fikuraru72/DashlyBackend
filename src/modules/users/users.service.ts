@@ -298,4 +298,42 @@ export class UsersService {
 
     return { success: true, count: deletedCount };
   }
+
+  async removeBatch(ids: number[]) {
+    if (!ids || ids.length === 0) {
+      return { success: true, count: 0 };
+    }
+
+    let count = 0;
+    await this.db.transaction(async (tx) => {
+      const allUsers = await tx.query.users.findMany({
+        with: { role: true },
+      });
+
+      const safeIdsToDelete = ids.filter((id) => {
+        const u = allUsers.find((user) => user.id === id);
+        return !u || !u.role || (u.role.name !== 'SUPER_ADMIN' && u.role.name !== 'STAFF');
+      });
+
+      if (safeIdsToDelete.length === 0) return;
+
+      for (const id of safeIdsToDelete) {
+        await tx.delete(schema.eventParticipants).where(eq(schema.eventParticipants.userId, id));
+        await tx.delete(schema.userHealthProfiles).where(eq(schema.userHealthProfiles.userId, id));
+        await tx.delete(schema.rankings).where(eq(schema.rankings.userId, id));
+        await tx.delete(schema.anomalies).where(eq(schema.anomalies.userId, id));
+        await tx.delete(schema.locationLogs).where(eq(schema.locationLogs.userId, id));
+        await tx.delete(schema.tokens).where(eq(schema.tokens.userId, id));
+        await tx.delete(schema.users).where(eq(schema.users.id, id));
+      }
+
+      await tx.execute(
+        sql`UPDATE events SET current_count = (SELECT COUNT(*) FROM event_participants WHERE event_id = events.id)`,
+      );
+
+      count = safeIdsToDelete.length;
+    });
+
+    return { success: true, count };
+  }
 }

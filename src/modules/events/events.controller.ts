@@ -133,6 +133,12 @@ export class EventsController {
     return this.eventsService.deleteEvent(+id, user);
   }
 
+  @Delete(':id/participants/:userId')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  async removeParticipantFromEvent(@Param('id') eventId: string, @Param('userId') userId: string) {
+    return this.eventsService.removeParticipantFromEvent(+eventId, +userId);
+  }
+
   @Post(':id/join')
   @Roles('SUPER_ADMIN', 'STAFF', 'PARTICIPANT')
   async joinEvent(@Param('id') id: string, @CurrentUser() user: any) {
