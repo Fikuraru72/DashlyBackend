@@ -51,10 +51,7 @@ export class StatusHandlerService {
       // Update Redis presence regardless of state to ensure accurate online tracking
       await this.redisService.setParticipantOnline(eventId, participantId);
 
-      if (
-        !participant ||
-        participant.participantState === 'FROZEN'
-      ) {
+      if (!participant || participant.participantState === 'FROZEN') {
         this.logger.warn(
           `[Status Handler] Participant ${participantId} tried to go ONLINE but is ${participant?.participantState}. Ignoring transition to TRACKING.`,
         );
