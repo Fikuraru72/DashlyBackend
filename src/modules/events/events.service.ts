@@ -1517,11 +1517,9 @@ export class EventsService {
           } else {
             userId = user.id;
             isNewUser = false;
-            // Update name/phone for existing users if they have placeholder names
+            // ALWAYS update name from CSV if valid, and update phone if missing
             const shouldUpdateName =
-              safeName &&
-              safeName !== 'Participant' &&
-              (user.name === 'User' || user.name === 'Participant' || !user.name);
+              safeName && safeName !== 'Participant' && user.name !== safeName;
             const shouldUpdatePhone = safePhone && !user.phone;
             if (shouldUpdateName || shouldUpdatePhone) {
               await tx
