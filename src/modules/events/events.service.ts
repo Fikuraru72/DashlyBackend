@@ -1706,4 +1706,63 @@ export class EventsService {
 
     return { success: true, message: 'Participant removed from event successfully' };
   }
+
+  async addParticipantsBatch(eventId: number, userIds: number[]) {
+    const event = await this.db.query.events.findFirst({
+      where: eq(schema.events.id, eventId),
+    });
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    if (!userIds || userIds.length === 0) {
+      return { success: true, message: 'No participants selected', count: 0 };
+    }
+
+    let addedCount = 0;
+
+    await this.db.transaction(async (tx) => {
+      const existingParticipants = await tx.query.eventParticipants.findMany({
+        where: eq(schema.eventParticipants.eventId, eventId),
+      });
+
+      const existingUserIds = new Set(existingParticipants.map((p) => p.userId));
+      const existingBibs = new Set(existingParticipants.map((p) => p.bibNumber).filter(Boolean));
+
+      let nextBibSeq = existingParticipants.length + 1;
+
+      for (const userId of userIds) {
+        if (existingUserIds.has(userId)) continue;
+
+        let bibCandidate = String(nextBibSeq).padStart(3, '0');
+        while (existingBibs.has(bibCandidate)) {
+          nextBibSeq++;
+          bibCandidate = String(nextBibSeq).padStart(3, '0');
+        }
+
+        await tx.insert(schema.eventParticipants).values({
+          eventId,
+          userId,
+          participantNumber: bibCandidate,
+          bibNumber: bibCandidate,
+          participantState: 'CONFIRMED',
+        });
+
+        existingBibs.add(bibCandidate);
+        existingUserIds.add(userId);
+        nextBibSeq++;
+        addedCount++;
+      }
+
+      await tx.execute(
+        sql`UPDATE events SET current_count = (SELECT COUNT(*) FROM event_participants WHERE event_id = ${eventId}) WHERE id = ${eventId}`,
+      );
+    });
+
+    return {
+      success: true,
+      message: `Successfully added ${addedCount} participants to event.`,
+      addedCount,
+    };
+  }
 }
