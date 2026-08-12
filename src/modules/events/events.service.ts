@@ -1214,9 +1214,10 @@ export class EventsService {
    */
   private parseCsvBuffer(buffer: Buffer): Record<string, string>[] {
     let content = buffer.toString('utf-8');
-    // Remove UTF-8 BOM if present
+    // Remove UTF-8/UTF-16 BOM and NULL bytes if present
     content = content
-      .replace(/^\uFEFF/, '')
+      .replace(/\0/g, '')
+      .replace(/[\uFEFF\u200B]/g, '')
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n');
     const lines = content.split('\n').filter((l) => l.trim().length > 0);
@@ -1246,13 +1247,21 @@ export class EventsService {
             inQuotes = !inQuotes;
           }
         } else if (char === delim && !inQuotes) {
-          result.push(current.trim());
+          result.push(current.trim().replace(/^["']|["']$/g, ''));
           current = '';
         } else {
           current += char;
         }
       }
-      result.push(current.trim());
+      result.push(current.trim().replace(/^["']|["']$/g, ''));
+
+      // Fallback regex split if delimiter loop failed to split columns
+      if (result.length <= 1 && delim === ',') {
+        const regexSplit = line
+          .split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+          .map((item) => item.trim().replace(/^["']|["']$/g, ''));
+        if (regexSplit.length > 1) return regexSplit;
+      }
       return result;
     };
 
