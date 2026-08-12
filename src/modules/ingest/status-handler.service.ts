@@ -53,7 +53,6 @@ export class StatusHandlerService {
 
       if (
         !participant ||
-        participant.participantState === 'FINISHED' ||
         participant.participantState === 'FROZEN'
       ) {
         this.logger.warn(
