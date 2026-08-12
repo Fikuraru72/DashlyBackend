@@ -387,6 +387,7 @@ export class EventsService {
         monitoringStartOffset: schema.events.monitoringStartOffset,
         monitoringEndOffset: schema.events.monitoringEndOffset,
         // Route info fields (from events table)
+        routeGeojson: schema.events.routeGeojson,
         totalDistanceMeters: schema.events.totalDistanceMeters,
         totalElevationMeters: schema.events.totalElevationMeters,
         altitudeProfile: schema.events.altitudeProfile,
