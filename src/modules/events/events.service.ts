@@ -433,6 +433,21 @@ export class EventsService {
       if (!isStaff) throw new ForbiddenException('Not assigned to this event');
     }
 
+    // Auto-sync currentCount with actual number of registered participants
+    const [countResult] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.eventParticipants)
+      .where(eq(schema.eventParticipants.eventId, eventId));
+
+    const actualCount = countResult?.count ?? 0;
+    if (event.currentCount !== actualCount) {
+      await this.db
+        .update(schema.events)
+        .set({ currentCount: actualCount })
+        .where(eq(schema.events.id, eventId));
+      event.currentCount = actualCount;
+    }
+
     const monitoringWindow = getMonitoringWindow(event);
 
     return {
@@ -1626,6 +1641,11 @@ export class EventsService {
         errors.push(`Row ${i + 1} (${email}): ${err.message}`);
       }
     }
+
+    // Sync current_count with actual participant count after import
+    await this.db.execute(
+      sql`UPDATE events SET current_count = (SELECT COUNT(*) FROM event_participants WHERE event_id = ${eventId}) WHERE id = ${eventId}`,
+    );
 
     return {
       success: true,

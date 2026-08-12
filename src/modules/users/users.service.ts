@@ -258,6 +258,9 @@ export class UsersService {
       await tx.delete(schema.locationLogs).where(eq(schema.locationLogs.userId, userId));
       await tx.delete(schema.tokens).where(eq(schema.tokens.userId, userId));
       await tx.delete(schema.users).where(eq(schema.users.id, userId));
+      await tx.execute(
+        sql`UPDATE events SET current_count = (SELECT COUNT(*) FROM event_participants WHERE event_id = events.id)`,
+      );
     });
 
     return user;
