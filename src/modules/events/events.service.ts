@@ -1333,8 +1333,7 @@ export class EventsService {
 
       const rawEmail = getVal('email', 'email address', 'mail');
       const email = rawEmail ? rawEmail.toLowerCase().trim() : '';
-      const name =
-        getVal('fullname', 'full name', 'nama lengkap', 'nama', 'name') || 'Participant';
+      const name = getVal('fullname', 'full name', 'nama lengkap', 'nama', 'name') || 'Participant';
       const phone = getVal('phone', 'nomor hp', 'telepon', 'handphone', 'no hp', 'phone number');
       const bibNum =
         getVal(

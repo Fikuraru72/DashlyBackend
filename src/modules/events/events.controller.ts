@@ -226,7 +226,7 @@ export class EventsController {
     if (typeof rows === 'string') {
       try {
         rows = JSON.parse(rows);
-      } catch (e) {
+      } catch {
         // Ignore JSON parse failure, fallback to file buffer
       }
     }
