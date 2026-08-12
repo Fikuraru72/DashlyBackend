@@ -1207,4 +1207,220 @@ export class EventsService {
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as unknown as Buffer;
   }
+
+  /**
+   * Helper to parse CSV buffer into array of objects handling quoted string fields safely
+   */
+  private parseCsvBuffer(buffer: Buffer): Record<string, string>[] {
+    const content = buffer.toString('utf-8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = content.split('\n').filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return [];
+
+    const parseLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const headers = parseLine(lines[0]).map((h) => h.replace(/^["']|["']$/g, '').trim().toLowerCase());
+    const records: Record<string, string>[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = parseLine(lines[i]);
+      if (values.length === 0 || (values.length === 1 && !values[0])) continue;
+
+      const record: Record<string, string> = {};
+      headers.forEach((header, idx) => {
+        let val = values[idx] || '';
+        val = val.replace(/^["']|["']$/g, '').trim();
+        record[header] = val;
+      });
+      records.push(record);
+    }
+
+    return records;
+  }
+
+  async importParticipantsFromCsv(eventId: number, fileBuffer: Buffer) {
+    const event = await this.db.query.events.findFirst({
+      where: eq(schema.events.id, eventId),
+    });
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    const records = this.parseCsvBuffer(fileBuffer);
+    if (records.length === 0) {
+      throw new BadRequestException('CSV file is empty or invalid format');
+    }
+
+    let successCount = 0;
+    let createdUsersCount = 0;
+    let existingUsersCount = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      const getVal = (...keys: string[]) => {
+        for (const k of keys) {
+          const keyLower = k.toLowerCase();
+          for (const rawKey of Object.keys(row)) {
+            if (rawKey.toLowerCase() === keyLower) return row[rawKey];
+          }
+        }
+        return '';
+      };
+
+      const rawEmail = getVal('email', 'email address', 'mail');
+      const email = rawEmail ? rawEmail.toLowerCase().trim() : '';
+      const name = getVal('full name', 'fullname', 'nama lengkap', 'nama', 'name') || 'Participant';
+      const phone = getVal('phone', 'nomor hp', 'telepon', 'handphone', 'no hp', 'phone number');
+      const bibNum = getVal('participant number', 'bib number', 'bib', 'no bib', 'nomor peserta') || String(i + 1).padStart(3, '0');
+      const bloodType = getVal('golongan darah', 'blood type', 'goldar');
+      const medicalHistory = getVal('penyakit bawaan', 'medical history', 'riwayat penyakit');
+      const emergencyPhone = getVal('nomor kontak darurat', 'emergency phone', 'kontak darurat', 'emergency contact');
+      const emergencyRelation = getVal('hubungan dengan kontak darurat', 'emergency relation', 'hubungan kontak darurat');
+
+      if (!email) {
+        errors.push(`Row ${i + 1}: Email is missing for ${name}`);
+        continue;
+      }
+
+      try {
+        await this.db.transaction(async (tx) => {
+          // 1. Check or create User
+          let user = await tx.query.users.findFirst({
+            where: eq(schema.users.email, email),
+          });
+
+          let userId: number;
+          if (!user) {
+            const rawPassword = phone ? phone.trim() : 'EcoRace2026!';
+            const hashedPassword = await bcrypt.hash(rawPassword, 10);
+            const [newUser] = await tx
+              .insert(schema.users)
+              .values({
+                email,
+                name,
+                phone: phone || null,
+                password: hashedPassword,
+              })
+              .returning();
+            userId = newUser.id;
+            createdUsersCount++;
+          } else {
+            userId = user.id;
+            existingUsersCount++;
+            if (phone || name) {
+              await tx
+                .update(schema.users)
+                .set({
+                  ...(phone && !user.phone ? { phone } : {}),
+                  ...(name && user.name === 'User' ? { name } : {}),
+                })
+                .where(eq(schema.users.id, userId));
+            }
+          }
+
+          // 2. Upsert Health Profile
+          if (bloodType || emergencyPhone || medicalHistory || emergencyRelation) {
+            const existingHealth = await tx.query.userHealthProfiles.findFirst({
+              where: eq(schema.userHealthProfiles.userId, userId),
+            });
+
+            if (existingHealth) {
+              await tx
+                .update(schema.userHealthProfiles)
+                .set({
+                  ...(bloodType ? { bloodType } : {}),
+                  ...(medicalHistory ? { medicalHistory } : {}),
+                  ...(emergencyPhone ? { emergencyPhone, emergencyContact: emergencyPhone } : {}),
+                  ...(emergencyRelation ? { emergencyRelation } : {}),
+                  updatedAt: new Date(),
+                })
+                .where(eq(schema.userHealthProfiles.userId, userId));
+            } else {
+              await tx.insert(schema.userHealthProfiles).values({
+                userId,
+                bloodType: bloodType || null,
+                medicalHistory: medicalHistory || null,
+                emergencyPhone: emergencyPhone || null,
+                emergencyContact: emergencyPhone || null,
+                emergencyRelation: emergencyRelation || null,
+              });
+            }
+          }
+
+          // 3. Register or Update Event Participant
+          const existingParticipant = await tx.query.eventParticipants.findFirst({
+            where: and(
+              eq(schema.eventParticipants.eventId, eventId),
+              eq(schema.eventParticipants.userId, userId),
+            ),
+          });
+
+          if (!existingParticipant) {
+            await tx.insert(schema.eventParticipants).values({
+              eventId,
+              userId,
+              participantNumber: bibNum,
+              bibNumber: bibNum,
+              participantState: 'CONFIRMED',
+            });
+
+            await tx
+              .update(schema.events)
+              .set({ currentCount: sql`${schema.events.currentCount} + 1` })
+              .where(eq(schema.events.id, eventId));
+          } else {
+            await tx
+              .update(schema.eventParticipants)
+              .set({
+                bibNumber: bibNum,
+                participantNumber: bibNum,
+                participantState: 'CONFIRMED',
+              })
+              .where(eq(schema.eventParticipants.id, existingParticipant.id));
+          }
+
+          successCount++;
+        });
+      } catch (err: any) {
+        this.logger.error(`Error importing row ${i + 1} (${email}): ${err.message}`, err.stack);
+        errors.push(`Row ${i + 1} (${email}): ${err.message}`);
+      }
+    }
+
+    return {
+      success: true,
+      message: `Successfully imported ${successCount} participants.`,
+      stats: {
+        totalRows: records.length,
+        successCount,
+        createdUsersCount,
+        existingUsersCount,
+        errorCount: errors.length,
+      },
+      errors,
+    };
+  }
 }

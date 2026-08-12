@@ -213,4 +213,17 @@ export class EventsController {
     // We send a Buffer directly so Express will pipe it to the response
     res.end(Buffer.from(buffer));
   }
+
+  @Post(':id/import-csv')
+  @Roles('SUPER_ADMIN', 'STAFF')
+  @UseInterceptors(FileInterceptor('file'))
+  async importParticipantsCsv(
+    @Param('id') id: string,
+    @UploadedFile() file: { buffer: Buffer; originalname?: string },
+  ) {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('No CSV file uploaded');
+    }
+    return this.eventsService.importParticipantsFromCsv(+id, file.buffer);
+  }
 }
