@@ -250,7 +250,9 @@ export class UsersService {
 
     await this.db.transaction(async (tx) => {
       await tx.delete(schema.eventParticipants).where(eq(schema.eventParticipants.userId, userId));
-      await tx.delete(schema.userHealthProfiles).where(eq(schema.userHealthProfiles.userId, userId));
+      await tx
+        .delete(schema.userHealthProfiles)
+        .where(eq(schema.userHealthProfiles.userId, userId));
       await tx.delete(schema.rankings).where(eq(schema.rankings.userId, userId));
       await tx.delete(schema.anomalies).where(eq(schema.anomalies.userId, userId));
       await tx.delete(schema.locationLogs).where(eq(schema.locationLogs.userId, userId));
