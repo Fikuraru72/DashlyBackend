@@ -113,21 +113,20 @@ export class StatusHandlerService {
         where: eq(schema.eventParticipants.id, participantId),
       });
 
-      if (pos) {
-        this.gateway.broadcastPositionUpdate(eventId, {
-          participantId,
-          userId,
-          eventId,
-          lat: pos.lat,
-          lng: pos.lng,
-          speed: stats.speed ? parseFloat(stats.speed) : 0,
-          status: 'inactive',
-          state: participant?.participantState || 'TRACKING',
-          battery: stats.battery ? parseInt(stats.battery, 10) : 100,
-          isOffline: true,
-          timestamp: new Date().toISOString(),
-        });
-      }
+      this.gateway.broadcastPositionUpdate(eventId, {
+        participantId,
+        userId,
+        eventId,
+        lat: pos?.lat ?? 0,
+        lng: pos?.lng ?? 0,
+        speed: stats?.speed ? parseFloat(stats.speed) : 0,
+        status: 'inactive',
+        state: participant?.participantState || 'TRACKING',
+        battery: stats?.battery ? parseInt(stats.battery, 10) : 100,
+        isOffline: true,
+        timestamp: new Date().toISOString(),
+      });
+      return;
     }
   }
 }
