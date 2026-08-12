@@ -1234,13 +1234,13 @@ export class EventsService {
     // Remove UTF-8/UTF-16 BOM and NULL bytes if present
     content = content
       .replaceAll(String.fromCharCode(0), '')
-      .replace(/[\uFEFF\u200B]/g, '')
+      .replace(/[\uFEFF\u200B\uFFFE]/g, '')
+      .replace(/[\u200C\u200D]/g, '')
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n');
     const lines = content.split('\n').filter((l) => l.trim().length > 0);
     if (lines.length === 0) return [];
 
-    // Auto-detect delimiter from header line (comma, semicolon, or tab)
     const line0 = lines[0];
     const commaCount = (line0.match(/,/g) || []).length;
     const semiCount = (line0.match(/;/g) || []).length;
@@ -1250,36 +1250,63 @@ export class EventsService {
     else if (tabCount > commaCount && tabCount > semiCount) delimiter = '\t';
 
     const parseLine = (line: string, delim: string): string[] => {
-      const result: string[] = [];
-      let current = '';
-      let inQuotes = false;
+      const normalizedLine = line
+        .replace(/\uFF0C/g, ',')
+        .replace(/\u060C/g, ',')
+        .replace(/\u3001/g, ',')
+        .replace(/\uFE50/g, ',')
+        .replace(/\uFE51/g, ',');
 
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          if (inQuotes && line[i + 1] === '"') {
-            current += '"';
-            i++;
+      const cleanQuotes = (s: string) =>
+        s.trim().replace(/^["'\u201C\u201D]|["'\u201C\u201D]$/g, '');
+
+      const charParse = (text: string, d: string): string[] => {
+        const res: string[] = [];
+        let cur = '';
+        let inQ = false;
+        for (let j = 0; j < text.length; j++) {
+          const c = text[j];
+          if (c === '"' || c === '\u201C' || c === '\u201D') {
+            if (inQ && j + 1 < text.length && (text[j + 1] === '"' || text[j + 1] === c)) {
+              cur += '"';
+              j++;
+            } else {
+              inQ = !inQ;
+            }
+          } else if (c === d && !inQ) {
+            res.push(cleanQuotes(cur));
+            cur = '';
           } else {
-            inQuotes = !inQuotes;
+            cur += c;
           }
-        } else if (char === delim && !inQuotes) {
-          result.push(current.trim().replace(/^["']|["']$/g, ''));
-          current = '';
-        } else {
-          current += char;
         }
-      }
-      result.push(current.trim().replace(/^["']|["']$/g, ''));
+        res.push(cleanQuotes(cur));
+        return res;
+      };
 
-      // Fallback regex split if delimiter loop failed to split columns
-      if (result.length <= 1 && delim === ',') {
-        const regexSplit = line
+      const candidates: string[][] = [];
+      candidates.push(charParse(normalizedLine, delim));
+      if (delim !== ',') candidates.push(charParse(normalizedLine, ','));
+      candidates.push(charParse(line, ','));
+      candidates.push(charParse(normalizedLine, ';'));
+      candidates.push(charParse(normalizedLine, '\t'));
+
+      try {
+        const regexSplit = normalizedLine
           .split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
-          .map((item) => item.trim().replace(/^["']|["']$/g, ''));
-        if (regexSplit.length > 1) return regexSplit;
+          .map((s) => cleanQuotes(s));
+        candidates.push(regexSplit);
+      } catch {
+        // ignore regex error
       }
-      return result;
+
+      candidates.push(normalizedLine.split(',').map((s) => cleanQuotes(s)));
+
+      let best = candidates[0];
+      for (const c of candidates) {
+        if (c.length > best.length) best = c;
+      }
+      return best;
     };
 
     const headers = parseLine(lines[0], delimiter).map((h) =>
