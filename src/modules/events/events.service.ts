@@ -1340,20 +1340,18 @@ export class EventsService {
         return '';
       };
 
-      const rawEmail = getVal('email', 'email address', 'mail');
-      const email = rawEmail ? rawEmail.toLowerCase().trim() : '';
-      const name = getVal('fullname', 'full name', 'nama lengkap', 'nama', 'name') || 'Participant';
-      const phone = getVal('phone', 'nomor hp', 'telepon', 'handphone', 'no hp', 'phone number');
-      const bibNum =
-        getVal(
-          'participantnumber',
-          'participant number',
-          'bib number',
-          'bibnumber',
-          'bib',
-          'no bib',
-          'nomor peserta',
-        ) || String(i + 1).padStart(3, '0');
+      let rawEmail = getVal('email', 'email address', 'mail', 'alamat email', 'e-mail');
+      let name = getVal('fullname', 'full name', 'nama lengkap', 'nama', 'name');
+      let phone = getVal('phone', 'nomor hp', 'telepon', 'handphone', 'no hp', 'phone number', 'nohp');
+      let bibNum = getVal(
+        'participantnumber',
+        'participant number',
+        'bib number',
+        'bibnumber',
+        'bib',
+        'no bib',
+        'nomor peserta',
+      );
       const bloodType = getVal('bloodtype', 'golongan darah', 'blood type', 'goldar');
       const medicalHistory = getVal(
         'medicalhistory',
@@ -1376,8 +1374,49 @@ export class EventsService {
         'hubungan',
       );
 
+      // Pattern-based and Column Index Fallbacks if header matching failed
+      const allRowValues = Object.values(row).map((v) => String(v ?? '').trim());
+
+      // 1. Email Fallback: Find any cell matching email regex or column index 3
+      if (!rawEmail) {
+        const emailCell = allRowValues.find((v) => /[^\s@]+@[^\s@]+\.[^\s@]+/.test(v));
+        if (emailCell) {
+          rawEmail = emailCell;
+        } else if (allRowValues[3] && allRowValues[3].includes('@')) {
+          rawEmail = allRowValues[3];
+        }
+      }
+
+      // 2. Phone Fallback: Find any cell with phone pattern or column index 4
+      if (!phone) {
+        const phoneCell = allRowValues.find((v) => /^\+?[0-9]{8,15}$/.test(v.replace(/[\s-]/g, '')));
+        if (phoneCell) {
+          phone = phoneCell;
+        } else if (allRowValues[4]) {
+          phone = allRowValues[4];
+        }
+      }
+
+      // 3. Name Fallback: Column index 2 or first text cell that is not email/phone
+      if (!name || name === 'Participant') {
+        if (allRowValues[2] && !allRowValues[2].includes('@') && !/^\+?[0-9]{8,15}$/.test(allRowValues[2])) {
+          name = allRowValues[2].replace(/^["']|["']$/g, '');
+        }
+      }
+
+      // 4. BIB Fallback: Column index 0 or formatted index
+      if (!bibNum || bibNum === String(i + 1).padStart(3, '0')) {
+        if (allRowValues[0] && allRowValues[0] !== name) {
+          bibNum = allRowValues[0].replace(/^["']|["']$/g, '');
+        } else {
+          bibNum = String(i + 1).padStart(3, '0');
+        }
+      }
+
+      const email = rawEmail ? rawEmail.toLowerCase().trim() : '';
+
       if (!email) {
-        errors.push(`Row ${i + 1}: Email is missing for ${name}`);
+        errors.push(`Row ${i + 1}: Email is missing for ${name || 'Participant'}`);
         continue;
       }
 
