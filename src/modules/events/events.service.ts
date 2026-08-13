@@ -740,22 +740,33 @@ export class EventsService {
         throw new NotFoundException('Participant record not found. Please register first.');
       }
 
-      if (
-        participant.participantState === 'CONFIRMED' ||
-        participant.participantState === 'TRACKING'
-      ) {
-        throw new ConflictException('Your BIB is already verified.');
-      }
-
-      // Check if BIB matches
-      if (participant.bibNumber !== bibNumber) {
+      // Check if BIB matches assigned bibNumber (if already assigned)
+      if (participant.bibNumber && participant.bibNumber !== bibNumber) {
         throw new BadRequestException('Invalid BIB number for this event.');
       }
 
-      // Update state to CONFIRMED
+      // Check if another participant is using this BIB number in the same event
+      const existingOtherBib = await tx.query.eventParticipants.findFirst({
+        where: and(
+          eq(schema.eventParticipants.eventId, eventId),
+          eq(schema.eventParticipants.bibNumber, bibNumber),
+          ne(schema.eventParticipants.userId, user.id),
+        ),
+      });
+
+      if (existingOtherBib) {
+        throw new BadRequestException('This BIB number is already assigned to another participant.');
+      }
+
+      // Update bibNumber and state if currently REGISTERED
+      const updatePayload: Record<string, any> = { bibNumber };
+      if (participant.participantState === 'REGISTERED') {
+        updatePayload.participantState = 'CONFIRMED';
+      }
+
       await tx
         .update(schema.eventParticipants)
-        .set({ participantState: 'CONFIRMED' })
+        .set(updatePayload)
         .where(eq(schema.eventParticipants.id, participant.id));
 
       return {
